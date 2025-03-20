@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light theme colors */
+  --color-primary-50: #eef5ff;
+  --color-primary-100: #d9e8ff;
+  --color-primary-200: #bcd8ff;
+  --color-primary-300: #8ebdff;
+  --color-primary-400: #5698ff;
+  --color-primary-500: #3a6ff7;
+  --color-primary-600: #2953cc;
+  --color-primary-700: #1c3fad;
+  --color-primary-800: #173385;
+  --color-primary-900: #102d6e;
+  
+  --color-secondary-50: #eefdf7;
+  --color-secondary-100: #d6f9ee;
+  --color-secondary-200: #aff3dc;
+  --color-secondary-300: #77e9c3;
+  --color-secondary-400: #42dca9;
+  --color-secondary-500: #32d4a4;
+  --color-secondary-600: #18a880;
+  --color-secondary-700: #138564;
+  --color-secondary-800: #11604a;
+  --color-secondary-900: #0e513e;
+  
+  --color-dark-50: #f5f7fa;
+  --color-dark-100: #e7ebf3;
+  --color-dark-200: #d0d9e8;
+  --color-dark-300: #a5b8d3;
+  --color-dark-400: #6b778c;
+  --color-dark-500: #455571;
+  --color-dark-600: #32415e;
+  --color-dark-700: #253552;
+  --color-dark-800: #1e294a;
+  --color-dark-900: #172b4d;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  font-family: 'Inter', 'Roboto', sans-serif;
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f7fa;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #a5b8d3;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b778c;
+}
+
+/* Animation utilities */
+@layer components {
+  /* Animated elements */
+  .animate-on-scroll {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
+  
+  .animate-on-scroll.animate-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  /* Card hover effects */
+  .card-hover {
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Button hover effects */
+  .btn-hover {
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .btn-hover:hover {
+    transform: translateY(-2px);
+  }
+  
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(90deg, #3a6ff7, #32d4a4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+  
+  /* Glass morphism */
+  .glass-morphism {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Animated line below headers */
+  .header-underline {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .header-underline::after {
+    content: '';
+    position: absolute;
+    width: 60%;
+    transform: scaleX(0);
+    height: 3px;
+    bottom: -6px;
+    left: 0;
+    background: linear-gradient(90deg, #3a6ff7, #32d4a4);
+    transform-origin: bottom left;
+    transition: transform 0.3s ease-out;
+  }
+  
+  .header-underline:hover::after {
+    transform: scaleX(1);
+  }
+  
+  /* Animated border */
+  .animated-border {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  
+  .animated-border::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #3a6ff7, #32d4a4, #3a6ff7);
+    background-size: 400% 400%;
+    z-index: -1;
+    border-radius: 14px;
+    animation: border-animation 3s ease infinite;
+  }
+  
+  /* Ripple effect for buttons and interactive elements */
+  .ripple-container {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .ripple {
+    position: absolute;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.4);
+    transform: scale(0);
+    animation: ripple-animation 0.6s linear;
+    pointer-events: none;
+  }
+  
+  @keyframes ripple-animation {
+    to {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+  
+  /* Floating animation for call-to-action elements */
+  .floating {
+    animation: floating 3s ease-in-out infinite;
+  }
+  
+  @keyframes floating {
+    0% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+    100% {
+      transform: translateY(0px);
+    }
+  }
+  
+  /* Shimmer effect for loading states */
+  .shimmer {
+    background: linear-gradient(90deg, 
+                rgba(255, 255, 255, 0),
+                rgba(255, 255, 255, 0.5),
+                rgba(255, 255, 255, 0));
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      background-position: -100% 0;
+    }
+    100% {
+      background-position: 100% 0;
+    }
+  }
+  
+  @keyframes border-animation {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+}
+
+/* 3D Card effect */
+.card-3d {
+  transform-style: preserve-3d;
+  transform: perspective(1000px);
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.card-3d-content {
+  transform: translateZ(50px);
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+} 
