@@ -2,10 +2,11 @@ import axios from 'axios';
 
 // Base API instance
 const api = axios.create({
-  baseURL: '/api/v1', // Use the proxy setup in package.json
+  baseURL: process.env.REACT_APP_API_URL, // Use environment variable or fallback to relative URL
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true
 });
 
 // Add a request interceptor to include auth token
@@ -14,6 +15,10 @@ api.interceptors.request.use(
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Ensure trailing slashes for endpoints that need them
+    if (config.url && config.url.startsWith('/bots') && !config.url.endsWith('/') && !config.url.includes('/', 5)) {
+      config.url = `${config.url}/`;
     }
     return config;
   },
@@ -33,6 +38,12 @@ api.interceptors.response.use(
   }
 );
 
+// Add this configuration to axios defaults to ensure redirects maintain auth headers
+axios.defaults.maxRedirects = 5;
+axios.defaults.validateStatus = function (status) {
+  return status >= 200 && status < 500; // Resolve only if status is 2xx or 3xx or 4xx
+};
+
 // Authentication
 export const authApi = {
   login: (username: string, password: string) => 
@@ -45,9 +56,9 @@ export const authApi = {
 
 // Bots
 export const botsApi = {
-  getAll: () => api.get('/bots'),
+  getAll: () => api.get('/bots/'),
   getById: (id: number) => api.get(`/bots/${id}`),
-  create: (botData: any) => api.post('/bots', botData),
+  create: (botData: any) => api.post('/bots/', botData),
   update: (id: number, botData: any) => api.put(`/bots/${id}`, botData),
   delete: (id: number) => api.delete(`/bots/${id}`),
   start: (id: number) => api.post(`/bots/${id}/start`),
@@ -57,8 +68,9 @@ export const botsApi = {
 
 // Indicators
 export const indicatorsApi = {
-  getAll: () => api.get('/indicators'),
+  getAll: () => api.get('/indicators/'),
   getById: (id: number) => api.get(`/indicators/${id}`),
+  getAvailable: () => api.get('/indicators/available'),
 };
 
 // Backtests

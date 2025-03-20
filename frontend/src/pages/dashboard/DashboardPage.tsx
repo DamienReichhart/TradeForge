@@ -81,15 +81,51 @@ const DashboardPage: React.FC = () => {
         setError(null);
         
         // Fetch user's bots
-        const botsResponse = await axios.get('/api/v1/bots');
-        setBots(botsResponse.data);
+        const botsResponse = await axios.get('/api/v1/bots/');
+        setBots(botsResponse.data || []);
         
-        // Fetch performance data
-        const performanceResponse = await axios.get('/api/v1/performance');
-        setPerformance(performanceResponse.data);
+        try {
+          // Fetch performance data
+          const performanceResponse = await axios.get('/api/v1/performance/');
+          setPerformance(performanceResponse.data || {
+            total_trades: 0,
+            winning_trades: 0,
+            losing_trades: 0,
+            win_rate: 0,
+            profit_factor: 0,
+            total_profit_loss: 0,
+            average_profit_loss: 0,
+            time_series: []
+          });
+        } catch (perfErr) {
+          console.error('Error fetching performance data:', perfErr);
+          // Set default performance data
+          setPerformance({
+            total_trades: 0,
+            winning_trades: 0,
+            losing_trades: 0,
+            win_rate: 0,
+            profit_factor: 0,
+            total_profit_loss: 0,
+            average_profit_loss: 0,
+            time_series: []
+          });
+        }
       } catch (err: any) {
         console.error('Error fetching dashboard data:', err);
         setError(err.response?.data?.detail || 'Failed to load dashboard data');
+        // Set default values
+        setBots([]);
+        setPerformance({
+          total_trades: 0,
+          winning_trades: 0,
+          losing_trades: 0,
+          win_rate: 0,
+          profit_factor: 0,
+          total_profit_loss: 0,
+          average_profit_loss: 0,
+          time_series: []
+        });
       } finally {
         setLoading(false);
       }
@@ -108,14 +144,14 @@ const DashboardPage: React.FC = () => {
   
   // Prepare chart data
   const chartData = {
-    labels: performance?.time_series.map(item => {
+    labels: performance?.time_series?.map(item => {
       const date = new Date(item.time);
       return date.toLocaleDateString();
     }) || [],
     datasets: [
       {
         label: 'Account Equity',
-        data: performance?.time_series.map(item => item.equity) || [],
+        data: performance?.time_series?.map(item => item.equity) || [],
         fill: false,
         borderColor: 'rgb(75, 192, 192)',
         tension: 0.1

@@ -20,6 +20,8 @@ class BotCreate(BotBase):
     name: str
     pair: str
     timeframe: str
+    buy_condition: Optional[str] = None
+    sell_condition: Optional[str] = None
     indicators: Optional[List[BotIndicatorCreate]] = []
 
 # Properties to receive on bot update
@@ -43,7 +45,7 @@ class BotInDBBase(BotBase):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Properties to return to client
 class Bot(BotInDBBase):

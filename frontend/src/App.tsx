@@ -21,6 +21,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import BotDetailPage from './pages/dashboard/BotDetailPage';
 import BacktestReportPage from './pages/dashboard/BacktestReportPage';
+import NewBotPage from './pages/dashboard/NewBotPage';
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -79,6 +80,7 @@ function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="new" element={<NewBotPage />} />
         <Route path=":botId" element={<BotDetailPage />} />
         <Route path="backtest/report/:backtestId" element={<BacktestReportPage />} />
       </Route>

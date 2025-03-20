@@ -27,7 +27,7 @@ class TutorialInDBBase(TutorialBase):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Tutorial(TutorialInDBBase):
     pass
@@ -56,7 +56,7 @@ class OpinionInDBBase(OpinionBase):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Opinion(OpinionInDBBase):
     pass 

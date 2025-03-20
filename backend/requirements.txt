@@ -19,3 +19,5 @@ pydantic_settings
 pydantic[email]
 ta
 psutil
+email-validator
+uvloop

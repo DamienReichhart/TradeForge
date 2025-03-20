@@ -10,7 +10,8 @@ class Indicator(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
     description = Column(String)
-    parameters = Column(JSON)  # JSON field to store customizable parameters
+    type = Column(String, nullable=False)  # Reference to the indicator type in the registry
+    parameters = Column(JSON)  # Default parameters
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
