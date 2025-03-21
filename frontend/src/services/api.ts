@@ -10,7 +10,13 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true
+  withCredentials: true,
+  // Configure axios to follow redirects and maintain the original HTTP method
+  maxRedirects: 5,
+  // This ensures DELETE/PUT methods are preserved during redirects
+  validateStatus: function (status) {
+    return status >= 200 && status < 500; // Resolve only if status is 2xx/3xx/4xx
+  }
 });
 
 // Add a request interceptor to include auth token
@@ -21,8 +27,16 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     // Ensure trailing slashes for endpoints that need them
-    if (config.url && config.url.startsWith('/bots') && !config.url.endsWith('/') && !config.url.includes('/', 5)) {
-      config.url = `${config.url}/`;
+    if (config.url && config.url.startsWith('/bots')) {
+      // For paths like /bots/ (collection endpoint)
+      if (config.url === '/bots' && !config.url.endsWith('/')) {
+        config.url = `${config.url}/`;
+      }
+      
+      // For paths with IDs like /bots/123 (excluding paths with further segments like /bots/123/start)
+      if (config.url.match(/^\/bots\/\d+$/) && !config.url.endsWith('/')) {
+        config.url = `${config.url}/`;
+      }
     }
     console.log('Request:', config.method, config.url, config);
     return config;
@@ -44,12 +58,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Add this configuration to axios defaults to ensure redirects maintain auth headers
-axios.defaults.maxRedirects = 5;
-axios.defaults.validateStatus = function (status) {
-  return status >= 200 && status < 500; // Resolve only if status is 2xx or 3xx or 4xx
-};
 
 // Authentication
 export const authApi = {
@@ -73,7 +81,12 @@ export const botsApi = {
   getById: (id: number) => api.get(`/bots/${id}`),
   create: (botData: any) => api.post('/bots/', botData),
   update: (id: number, botData: any) => api.put(`/bots/${id}`, botData),
-  delete: (id: number) => api.delete(`/bots/${id}`),
+  delete: (id: number) => {
+    // Ensure the URL ends with a trailing slash to avoid redirection
+    const url = `/bots/${id}/`;
+    console.log(`Making delete request to: ${url}`);
+    return api.delete(url);
+  },
   start: (id: number) => api.post(`/bots/${id}/start`),
   stop: (id: number) => api.post(`/bots/${id}/stop`),
   getPerformance: (id: number) => api.get(`/bots/${id}/performance`),

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Box, CircularProgress, Alert, alpha, useTheme } from '@mui/material';
 import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
+import { botsApi, performanceApi } from '../../services/api';
 
 // Component imports
 import DashboardHeader from '../../components/dashboard/DashboardHeader';
@@ -22,66 +22,69 @@ const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const theme = useTheme();
 
+  const fetchBots = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch user's bots using the API service
+      const botsResponse = await botsApi.getAll();
+      // Ensure bots is always an array
+      setBots(Array.isArray(botsResponse.data) ? botsResponse.data : []);
+      
+    } catch (err: any) {
+      console.error('Error fetching bots:', err);
+      setError(err.response?.data?.detail || 'Failed to load bots');
+      // Set default values
+      setBots([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchPerformance = useCallback(async () => {
+    try {
+      // Fetch performance data using the API service
+      const performanceResponse = await performanceApi.getSummary();
+      setPerformance(performanceResponse.data || {
+        total_trades: 0,
+        winning_trades: 0,
+        losing_trades: 0,
+        win_rate: 0,
+        profit_factor: 0,
+        total_profit_loss: 0,
+        average_profit_loss: 0,
+        time_series: []
+      });
+    } catch (perfErr) {
+      console.error('Error fetching performance data:', perfErr);
+      // Set default performance data
+      setPerformance({
+        total_trades: 0,
+        winning_trades: 0,
+        losing_trades: 0,
+        win_rate: 0,
+        profit_factor: 0,
+        total_profit_loss: 0,
+        average_profit_loss: 0,
+        time_series: []
+      });
+    }
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Fetch user's bots
-        const botsResponse = await axios.get('/api/v1/bots/');
-        // Ensure bots is always an array
-        setBots(Array.isArray(botsResponse.data) ? botsResponse.data : []);
-        
-        try {
-          // Fetch performance data
-          const performanceResponse = await axios.get('/api/v1/performance/');
-          setPerformance(performanceResponse.data || {
-            total_trades: 0,
-            winning_trades: 0,
-            losing_trades: 0,
-            win_rate: 0,
-            profit_factor: 0,
-            total_profit_loss: 0,
-            average_profit_loss: 0,
-            time_series: []
-          });
-        } catch (perfErr) {
-          console.error('Error fetching performance data:', perfErr);
-          // Set default performance data
-          setPerformance({
-            total_trades: 0,
-            winning_trades: 0,
-            losing_trades: 0,
-            win_rate: 0,
-            profit_factor: 0,
-            total_profit_loss: 0,
-            average_profit_loss: 0,
-            time_series: []
-          });
-        }
-      } catch (err: any) {
-        console.error('Error fetching dashboard data:', err);
-        setError(err.response?.data?.detail || 'Failed to load dashboard data');
-        // Set default values
-        setBots([]);
-        setPerformance({
-          total_trades: 0,
-          winning_trades: 0,
-          losing_trades: 0,
-          win_rate: 0,
-          profit_factor: 0,
-          total_profit_loss: 0,
-          average_profit_loss: 0,
-          time_series: []
-        });
-      } finally {
-        setLoading(false);
-      }
+      await fetchBots();
+      await fetchPerformance();
     };
     
     fetchData();
-  }, []);
+  }, [fetchBots, fetchPerformance]);
+
+  const handleBotDeleted = useCallback(() => {
+    // Refresh bots list after deletion
+    fetchBots();
+  }, [fetchBots]);
 
   if (loading) {
     return (
@@ -151,7 +154,7 @@ const DashboardPage: React.FC = () => {
       <PerformanceChart performance={performance} />
       
       {/* Bot list */}
-      <BotList bots={bots} />
+      <BotList bots={bots} onBotDeleted={handleBotDeleted} />
     </Box>
   );
 };

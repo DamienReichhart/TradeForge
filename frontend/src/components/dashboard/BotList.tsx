@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Box, 
   Typography, 
@@ -15,22 +15,36 @@ import {
   Tooltip,
   Paper,
   Divider,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
-import { Bot } from '../../types/bot';
+import { Bot } from '../../types';
+import { botsApi } from '../../services/api';
 
 interface BotListProps {
   bots: Bot[];
+  onBotDeleted?: () => void;
 }
 
-const BotList: React.FC<BotListProps> = ({ bots }) => {
+const BotList: React.FC<BotListProps> = ({ bots, onBotDeleted }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleCreateBot = () => {
     navigate('/dashboard/new');
@@ -38,6 +52,59 @@ const BotList: React.FC<BotListProps> = ({ bots }) => {
 
   const handleBotClick = (botId: number) => {
     navigate(`/dashboard/${botId}`);
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, bot: Bot) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedBot(bot);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleDeleteClick = () => {
+    handleMenuClose();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedBot) return;
+    
+    try {
+      setIsDeleting(true);
+      console.log(`Attempting to delete bot ${selectedBot.id}`);
+      
+      const response = await botsApi.delete(selectedBot.id);
+      console.log('Delete response:', response);
+      
+      // Close the dialog
+      setDeleteDialogOpen(false);
+      
+      // Call the callback if provided
+      if (onBotDeleted) {
+        onBotDeleted();
+      } else {
+        // Fallback to page reload if no callback provided
+        window.location.reload();
+      }
+    } catch (error: any) {
+      console.error('Error deleting bot:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // You could add error handling UI here
+      alert(`Failed to delete bot: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
   };
 
   if (bots.length === 0) {
@@ -161,7 +228,7 @@ const BotList: React.FC<BotListProps> = ({ bots }) => {
                 </Stack>
                 
                 <Tooltip title="Bot actions">
-                  <IconButton size="small">
+                  <IconButton size="small" onClick={(e) => handleMenuOpen(e, bot)}>
                     <MoreVertIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
@@ -244,6 +311,73 @@ const BotList: React.FC<BotListProps> = ({ bots }) => {
           </Grid>
         ))}
       </Grid>
+
+      {/* Bot actions menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        PaperProps={{
+          elevation: 3,
+          sx: {
+            borderRadius: 2,
+            minWidth: 180,
+            boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
+          }
+        }}
+      >
+        <MenuItem onClick={handleDeleteClick} sx={{ color: theme.palette.error.main }}>
+          <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Delete Bot</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete {selectedBot?.name}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button 
+            onClick={handleDeleteCancel} 
+            variant="outlined"
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 500
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={isDeleting}
+            startIcon={<DeleteIcon />}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 500
+            }}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

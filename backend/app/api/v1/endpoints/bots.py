@@ -312,12 +312,10 @@ def delete_bot(
         active_bots[bot_id].stop()
         del active_bots[bot_id]
     
-    # Don't actually delete, just mark as inactive
     bot.is_active = False
     bot.is_running = False
-    db.add(bot)
+    db.delete(bot)
     db.commit()
-    db.refresh(bot)
     return bot
 
 @router.post("/{bot_id}/start", response_model=schemas.Bot)
