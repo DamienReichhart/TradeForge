@@ -82,7 +82,8 @@ const DashboardPage: React.FC = () => {
         
         // Fetch user's bots
         const botsResponse = await axios.get('/api/v1/bots/');
-        setBots(botsResponse.data || []);
+        // Ensure bots is always an array
+        setBots(Array.isArray(botsResponse.data) ? botsResponse.data : []);
         
         try {
           // Fetch performance data
