@@ -13,6 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     first_name = Column(String)
     last_name = Column(String)
+    telegram_username = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

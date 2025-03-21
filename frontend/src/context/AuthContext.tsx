@@ -10,6 +10,7 @@ interface User {
   username: string;
   first_name?: string;
   last_name?: string;
+  telegram_username?: string;
   subscription_id?: number;
 }
 
@@ -21,6 +22,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   register: (email: string, username: string, password: string, firstName?: string, lastName?: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 // Create the context
@@ -138,6 +140,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const refreshUserData = async () => {
+    try {
+      const response = await authApi.me();
+      setUser(response.data);
+      return response.data;
+    } catch (err) {
+      console.error('Error refreshing user data:', err);
+    }
+  };
+
   const value = {
     isAuthenticated,
     user,
@@ -145,7 +157,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     error,
     login: handleLogin,
     logout: handleLogout,
-    register: handleRegister
+    register: handleRegister,
+    refreshUser: refreshUserData
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

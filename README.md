@@ -103,4 +103,44 @@ The backend API documentation is available at `http://localhost:8000/api/docs` w
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Telegram Integration
+
+TradeForge now supports Telegram integration for receiving notifications and alerts about your trading activities. Here's how to set it up:
+
+1. Go to your account Settings page in the dashboard
+2. Navigate to the Telegram tab
+3. Enter your Telegram username (without the @ symbol)
+4. Save your settings
+5. Send the `/start` command to the TradeForge bot
+6. The bot will confirm that your account is connected
+
+### Running the Migration
+
+To add the Telegram username field to the database, run the following commands:
+
+```bash
+# From the project root
+cd backend
+python -m migrations.add_telegram_username
+```
+
+### Telegram Bot Configuration
+
+The Telegram bot uses the token specified in the `.env` file. The current token is:
+
+```
+TELEGRAM_BOT_TOKEN=7917273636:AAE7PLpkV52jtvMLCzc84-pKo1q90JrPLpA
+```
+
+## Running the Application
+
+To run the application:
+
+```bash
+# Start all services using Docker Compose
+docker-compose up
+```
+
+This will start the backend API, frontend application, and PostgreSQL database. 

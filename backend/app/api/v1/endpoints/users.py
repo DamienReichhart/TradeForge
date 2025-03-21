@@ -3,12 +3,16 @@ from typing import Any, List
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app import models, schemas
 from app.api.deps import get_db, get_current_user, get_current_active_superuser
 from app.auth.jwt import get_password_hash, verify_password
 
 router = APIRouter()
+
+class TelegramUpdate(BaseModel):
+    telegram_username: str
 
 @router.get("/", response_model=List[schemas.User])
 def read_users(
@@ -52,6 +56,27 @@ def update_user_me(
     for field in user_data:
         if field in update_data:
             setattr(current_user, field, update_data[field])
+    
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.put("/me/telegram", response_model=schemas.User)
+def update_telegram_username(
+    *,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    telegram_update: TelegramUpdate,
+) -> Any:
+    """
+    Update user's Telegram username.
+    """
+    # Remove @ symbol if it's included
+    telegram_username = telegram_update.telegram_username.lstrip('@')
+    
+    # Update the user's Telegram username
+    current_user.telegram_username = telegram_username
     
     db.add(current_user)
     db.commit()

@@ -8,6 +8,7 @@ class UserBase(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    telegram_username: Optional[str] = None
     is_active: Optional[bool] = True
 
 # Properties to receive on user creation

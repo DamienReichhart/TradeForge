@@ -1,12 +1,13 @@
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import logging
 from app.db_init import main as db_init
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, engine, Base
 import traceback
 from fastapi.responses import JSONResponse
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -22,15 +23,15 @@ app = FastAPI(
 )
 
 # Set up CORS
-origins = settings.BACKEND_CORS_ORIGINS
-logger.info(f"Setting up CORS with origins: {origins}")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.BACKEND_CORS_ORIGINS:
+    logger.info(f"Setting up CORS with origins: {settings.BACKEND_CORS_ORIGINS}")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Add this after creating the app instance
 app.add_middleware(
@@ -64,7 +65,26 @@ async def health_check():
 
 @app.on_event("startup")
 async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Application startup")
+    
+    # Initialize the Telegram bot
+    from app.bots.telegram_bot import telegram_bot_service
+    logger.info("Telegram bot service initialized")
+
     # Create database tables on startup if they don't exist
     logger.info("Running database table creation on startup...")
     db_init()
     logger.info("Indicator initialization complete!")
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to TradeForge API"}
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 11101)),
+        reload=True,
+    )

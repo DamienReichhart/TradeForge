@@ -211,16 +211,30 @@ const DashboardLayout: React.FC = () => {
         
         <ListItem disablePadding>
           <ListItemButton 
+            onClick={() => navigate('/dashboard/settings')}
+            selected={isCurrentPath('/dashboard/settings')}
             sx={{ 
               borderRadius: 2,
               mb: 1,
-              transition: 'all 0.2s ease-in-out'
+              transition: 'all 0.2s ease-in-out',
+              '&.Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.15),
+                }
+              }
             }}
           >
-            <ListItemIcon>
+            <ListItemIcon sx={{ color: isCurrentPath('/dashboard/settings') ? theme.palette.primary.main : 'inherit' }}>
               <SettingsIcon />
             </ListItemIcon>
-            <ListItemText primary="Settings" />
+            <ListItemText 
+              primary="Settings" 
+              primaryTypographyProps={{ 
+                fontWeight: isCurrentPath('/dashboard/settings') ? 600 : 400,
+                color: isCurrentPath('/dashboard/settings') ? theme.palette.primary.main : 'inherit'
+              }}
+            />
           </ListItemButton>
         </ListItem>
         
