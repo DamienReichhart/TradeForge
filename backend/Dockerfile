@@ -16,4 +16,4 @@ RUN chmod +x /app/prestart.sh
 EXPOSE 11101
 
 # Start the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "11101", "--loop", "uvloop", "--workers", "10"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "11101", "--loop", "uvloop", "--workers", "1"] 

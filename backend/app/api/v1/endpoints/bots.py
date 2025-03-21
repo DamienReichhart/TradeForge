@@ -101,7 +101,7 @@ def create_bot(
             
             if not indicator:
                 # Try to sync indicator from registry if not found
-                from app.initial_data import init_indicators
+                from app.db_init import init_indicators
                 init_indicators(db)
                 
                 # Check again after sync
@@ -195,7 +195,7 @@ def update_bot(
             
             if not indicator:
                 # Try to sync indicator from registry if not found
-                from app.initial_data import init_indicators
+                from app.db_init import init_indicators
                 init_indicators(db)
                 
                 # Check again after sync

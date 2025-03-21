@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+// Get the API URL from environment variable with fallback
+const API_URL = process.env.REACT_APP_API_URL || 'http://api.tradeforge.apextradelogic.com:11101/api/v1';
+console.log('API URL: ', API_URL);
+
 // Base API instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL, // Use environment variable or fallback to relative URL
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,9 +24,11 @@ api.interceptors.request.use(
     if (config.url && config.url.startsWith('/bots') && !config.url.endsWith('/') && !config.url.includes('/', 5)) {
       config.url = `${config.url}/`;
     }
+    console.log('Request:', config.method, config.url, config);
     return config;
   },
   (error) => {
+    console.error('Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -30,10 +36,11 @@ api.interceptors.request.use(
 // Add a response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
+    console.log('Response:', response.status, response.config.url, response);
     return response;
   },
   (error) => {
-    console.error('API Error:', error.response?.data || error.message);
+    console.error('API Error:', error.response?.status, error.response?.config?.url, error.response?.data || error.message);
     return Promise.reject(error);
   }
 );

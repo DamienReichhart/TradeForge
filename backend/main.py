@@ -3,8 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import logging
-from create_tables import create_tables
-from app.initial_data import init_indicators
+from app.db_init import main as db_init
 from app.core.database import SessionLocal
 
 # Set up logging
@@ -44,13 +43,5 @@ async def health_check():
 async def startup_event():
     # Create database tables on startup if they don't exist
     logger.info("Running database table creation on startup...")
-    create_tables()
-    
-    # Initialize indicators
-    logger.info("Initializing indicators...")
-    db = SessionLocal()
-    try:
-        init_indicators(db)
-    finally:
-        db.close()
+    db_init()
     logger.info("Indicator initialization complete!")

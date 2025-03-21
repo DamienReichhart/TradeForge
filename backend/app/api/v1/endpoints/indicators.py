@@ -160,7 +160,7 @@ def sync_indicators(
     """
     Synchronize indicators from registry to database.
     """
-    from app.initial_data import init_indicators
+    from app.db_init import init_indicators
     init_indicators(db)
     
     # Return the updated indicators

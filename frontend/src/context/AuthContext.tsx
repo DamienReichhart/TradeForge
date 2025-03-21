@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
-import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
+import { authApi } from '../services/api';
+import axios from 'axios';
 
 // Define types
 interface User {
@@ -35,6 +36,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Check if user is authenticated on component mount
   useEffect(() => {
     const checkAuth = async () => {
+      setLoading(true);
+      
       const token = localStorage.getItem('accessToken');
       
       if (token) {
@@ -51,7 +54,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             handleLogout();
           } else {
             // Token valid, get user info
-            const response = await axios.get('/api/v1/auth/me');
+            const response = await authApi.me();
             setUser(response.data);
             setIsAuthenticated(true);
           }
@@ -72,15 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       setLoading(true);
       
-      const response = await axios.post('/api/v1/auth/login', 
-        new URLSearchParams({
-          'username': username,
-          'password': password
-        }),
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        }
-      );
+      const response = await authApi.login(username, password);
       
       const { access_token } = response.data;
       
@@ -91,7 +86,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       
       // Get user info
-      const userResponse = await axios.get('/api/v1/auth/me');
+      const userResponse = await authApi.me();
       setUser(userResponse.data);
       setIsAuthenticated(true);
     } catch (err: any) {
@@ -125,35 +120,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       setLoading(true);
       
-      await axios.post('/api/v1/auth/register', {
+      await authApi.register({
         email,
         username,
         password,
         first_name: firstName,
         last_name: lastName
-      }, {
-        headers: { 'Content-Type': 'application/json' }
       });
       
       // Login after successful registration
       await handleLogin(username, password);
     } catch (err: any) {
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
       console.error('Registration error:', err);
-      
-      // Extract error message from response if available
-      const errorDetail = err.response?.data?.detail;
-      let errorMessage = 'Registration failed. Please try again.';
-      
-      if (errorDetail) {
-        errorMessage = errorDetail;
-      } else if (err.response?.status === 400) {
-        errorMessage = 'Invalid registration data. Please check your input.';
-      } else if (err.response?.status === 422) {
-        errorMessage = 'Validation error. Please check all fields are correctly filled.';
-      }
-      
-      setError(errorMessage);
-      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
