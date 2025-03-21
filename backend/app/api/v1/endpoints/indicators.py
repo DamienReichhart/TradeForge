@@ -155,46 +155,14 @@ def delete_indicator(
 def sync_indicators(
     *,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_superuser),
+    current_user: models.User = Depends(get_current_user),
 ) -> Any:
     """
-    Synchronize registered indicators with database. Only for superusers.
+    Synchronize indicators from registry to database.
     """
-    # Get all available indicators from registry
-    available_indicators = IndicatorRegistry.get_all_indicators()
+    from app.initial_data import init_indicators
+    init_indicators(db)
     
-    # Get all indicators from database
-    db_indicators = db.query(models.Indicator).all()
-    db_indicator_types = {ind.type: ind for ind in db_indicators}
-    
-    # Create or update indicators
-    updated_indicators = []
-    for indicator_info in available_indicators:
-        indicator_name = indicator_info["name"]
-        
-        if indicator_name in db_indicator_types:
-            # Update existing indicator
-            indicator = db_indicator_types[indicator_name]
-            indicator.description = indicator_info["description"]
-            indicator.parameters = indicator_info["default_parameters"]
-            indicator.is_active = True
-        else:
-            # Create new indicator
-            indicator = models.Indicator(
-                name=indicator_name,
-                type=indicator_name,  # Use name as type
-                description=indicator_info["description"],
-                parameters=indicator_info["default_parameters"],
-                is_active=True
-            )
-            db.add(indicator)
-        
-        updated_indicators.append(indicator)
-    
-    db.commit()
-    
-    # Refresh all indicators
-    for indicator in updated_indicators:
-        db.refresh(indicator)
-    
-    return updated_indicators 
+    # Return the updated indicators
+    indicators = db.query(models.Indicator).filter(models.Indicator.is_active == True).all()
+    return indicators 

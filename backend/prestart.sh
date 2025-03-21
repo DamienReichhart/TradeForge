@@ -3,9 +3,9 @@
 # Wait for database to be ready
 sleep 5
 
-# Run migrations
-echo "Running database migrations..."
-alembic upgrade head
+# Create tables directly from models
+echo "Creating database tables if they don't exist..."
+python create_tables.py
 
 # Initialize data
 echo "Initializing data..."

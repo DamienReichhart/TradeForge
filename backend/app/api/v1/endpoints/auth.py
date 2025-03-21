@@ -85,13 +85,30 @@ def login(
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
+    logging.info(f"Login attempt for username: {form_data.username}")
+    
     # Try to find user by username
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user:
         # Try to find user by email
         user = db.query(models.User).filter(models.User.email == form_data.username).first()
+        logging.info(f"User found by email: {user is not None}")
+    else:
+        logging.info(f"User found by username: {user is not None}")
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        logging.warning("User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
+        
+    # Log password verification
+    password_valid = verify_password(form_data.password, user.hashed_password)
+    logging.info(f"Password validation result: {password_valid}")
+    
+    if not password_valid:
+        logging.warning("Invalid password")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

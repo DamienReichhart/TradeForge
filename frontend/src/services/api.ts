@@ -47,9 +47,15 @@ axios.defaults.validateStatus = function (status) {
 // Authentication
 export const authApi = {
   login: (username: string, password: string) => 
-    api.post('/auth/login', { username, password }, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    }),
+    api.post('/auth/login', 
+      new URLSearchParams({
+        'username': username,
+        'password': password
+      }),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    ),
   register: (userData: any) => api.post('/auth/register', userData),
   me: () => api.get('/auth/me'),
 };

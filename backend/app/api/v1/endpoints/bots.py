@@ -93,6 +93,29 @@ def create_bot(
     # Add indicators if specified
     if bot_in.indicators:
         for indicator_data in bot_in.indicators:
+            # Check if the indicator exists in the database
+            indicator = db.query(models.Indicator).filter(
+                models.Indicator.id == indicator_data.indicator_id,
+                models.Indicator.is_active == True
+            ).first()
+            
+            if not indicator:
+                # Try to sync indicator from registry if not found
+                from app.initial_data import init_indicators
+                init_indicators(db)
+                
+                # Check again after sync
+                indicator = db.query(models.Indicator).filter(
+                    models.Indicator.id == indicator_data.indicator_id,
+                    models.Indicator.is_active == True
+                ).first()
+                
+                if not indicator:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Indicator with id {indicator_data.indicator_id} not found in database. Please contact administrator."
+                    )
+            
             bot_indicator = models.BotIndicator(
                 bot_id=bot.id,
                 indicator_id=indicator_data.indicator_id,
@@ -164,6 +187,29 @@ def update_bot(
         
         # Add new indicators
         for indicator_data in update_data["indicators"]:
+            # Check if the indicator exists in the database
+            indicator = db.query(models.Indicator).filter(
+                models.Indicator.id == indicator_data.indicator_id,
+                models.Indicator.is_active == True
+            ).first()
+            
+            if not indicator:
+                # Try to sync indicator from registry if not found
+                from app.initial_data import init_indicators
+                init_indicators(db)
+                
+                # Check again after sync
+                indicator = db.query(models.Indicator).filter(
+                    models.Indicator.id == indicator_data.indicator_id,
+                    models.Indicator.is_active == True
+                ).first()
+                
+                if not indicator:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Indicator with id {indicator_data.indicator_id} not found in database. Please contact administrator."
+                    )
+            
             bot_indicator = models.BotIndicator(
                 bot_id=bot.id,
                 indicator_id=indicator_data.indicator_id,

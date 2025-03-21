@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import logging
+from create_tables import create_tables
+from app.initial_data import init_indicators
+from app.core.database import SessionLocal
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -19,6 +22,7 @@ app = FastAPI(
 
 # Set up CORS
 origins = settings.BACKEND_CORS_ORIGINS
+logger.info(f"Setting up CORS with origins: {origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -36,5 +40,17 @@ app.include_router(api_router, prefix="/api/v1")
 async def health_check():
     return {"status": "healthy"}
 
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+@app.on_event("startup")
+async def startup_event():
+    # Create database tables on startup if they don't exist
+    logger.info("Running database table creation on startup...")
+    create_tables()
+    
+    # Initialize indicators
+    logger.info("Initializing indicators...")
+    db = SessionLocal()
+    try:
+        init_indicators(db)
+    finally:
+        db.close()
+    logger.info("Indicator initialization complete!")
