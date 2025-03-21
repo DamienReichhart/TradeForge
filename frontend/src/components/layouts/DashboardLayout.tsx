@@ -388,12 +388,14 @@ const DashboardLayout: React.FC = () => {
           p: 3, 
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           minHeight: '100vh',
-          bgcolor: theme.palette.background.default
+          bgcolor: theme.palette.background.default,
+          display: 'flex',
+          flexDirection: 'column'
         }}
         className="animate-slide-up"
       >
         <Toolbar />
-        <Box sx={{ pb: 5 }}>
+        <Box sx={{ pb: 5, flexGrow: 1 }}>
           <Outlet />
         </Box>
       </Box>

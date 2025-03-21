@@ -138,14 +138,18 @@ export const createRipple = (event: React.MouseEvent<HTMLElement>) => {
  */
 export const initScrollAnimations = (): void => {
   const animateElements = document.querySelectorAll(
-    '.animate-fade-in, .animate-slide-up, .animate-slide-right, .animate-scale-in'
+    '.animate-fade-in, .animate-slide-up, .animate-slide-right, .animate-scale-in, .animate-on-scroll'
   );
 
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
+          if (entry.target.classList.contains('animate-on-scroll')) {
+            entry.target.classList.add('animate-visible');
+          } else {
+            entry.target.classList.add('visible');
+          }
           observer.unobserve(entry.target);
         }
       });
@@ -159,7 +163,11 @@ export const initScrollAnimations = (): void => {
 
   animateElements.forEach((element) => {
     // Reset visibility
-    element.classList.remove('visible');
+    if (element.classList.contains('animate-on-scroll')) {
+      element.classList.remove('animate-visible');
+    } else {
+      element.classList.remove('visible');
+    }
     observer.observe(element);
   });
 }; 

@@ -28,7 +28,7 @@ const Footer: React.FC = () => {
         borderTop: '1px solid',
         borderColor: 'rgba(0, 0, 0, 0.05)'
       }}
-      className="animate-on-scroll"
+      className="animate-fade-in visible"
     >
       <Container maxWidth="lg">
         <Grid container spacing={4}>
