@@ -31,6 +31,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import NightlightIcon from '@mui/icons-material/Nightlight';
 import { useAuth } from '../../context/AuthContext';
+import ThemeToggle from '../common/ThemeToggle';
 
 const drawerWidth = 260;
 
@@ -312,6 +313,8 @@ const DashboardLayout: React.FC = () => {
                 <NotificationsIcon />
               </IconButton>
             </Tooltip>
+            
+            <ThemeToggle />
             
             <Avatar 
               src=""

@@ -44,6 +44,7 @@
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 html,
@@ -249,4 +250,27 @@ body {
 .card-3d-content {
   transform: translateZ(50px);
   transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Dark theme specific styles */
+.theme-dark .gradient-text {
+  background: linear-gradient(90deg, #9c64ff 0%, #8a65ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.theme-dark .btn-glow {
+  box-shadow: 0 0 15px rgba(156, 100, 255, 0.5);
+}
+
+.theme-dark .glass-morphism {
+  background: rgba(30, 35, 55, 0.7) !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(138, 101, 255, 0.1);
+}
+
+.theme-dark code {
+  background: rgba(138, 101, 255, 0.1);
+  color: #b995ff;
 } 

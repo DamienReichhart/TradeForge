@@ -20,6 +20,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Footer from '../common/Footer';
 import MenuIcon from '@mui/icons-material/Menu';
+import ThemeToggle from '../common/ThemeToggle';
 
 interface HideOnScrollProps {
   children: React.ReactElement;
@@ -97,6 +98,9 @@ const MainLayout: React.FC = () => {
           </>
         )}
       </List>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+        <ThemeToggle size="large" />
+      </Box>
     </Box>
   );
 
@@ -159,14 +163,17 @@ const MainLayout: React.FC = () => {
               >
                 Opinions
               </Button>
+
+              <ThemeToggle sx={{ mx: 1 }} />
               
               {isAuthenticated ? (
                 <>
                   <Button 
-                    color="inherit" 
-                    component={RouterLink} 
+                    color="primary" 
+                    variant="contained" 
+                    component={RouterLink}
                     to="/dashboard"
-                    className="btn-hover"
+                    className="btn-glow"
                     sx={{ mx: 1 }}
                   >
                     Dashboard
@@ -214,7 +221,7 @@ const MainLayout: React.FC = () => {
             <IconButton
               color="inherit"
               aria-label="open drawer"
-              edge="end"
+              edge="start"
               onClick={handleDrawerToggle}
               sx={{ display: { md: 'none' } }}
             >
@@ -230,36 +237,22 @@ const MainLayout: React.FC = () => {
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better mobile performance
+            keepMounted: true, // Better open performance on mobile.
           }}
           sx={{
             display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: 250,
-              borderRadius: '0 16px 16px 0'
-            },
+            '& .MuiDrawer-paper': { width: 250 },
           }}
         >
           {drawer}
         </Drawer>
       </Box>
-
-      <Box
-        component="main"
-        className="animate-fade-in"
-        sx={{ 
-          flexGrow: 1, 
-          pt: 10, 
-          pb: 4,
-          transition: 'all 0.3s ease-in-out'
-        }}
-      >
-        <Container>
-          <Outlet />
-        </Container>
+      
+      <Box component="main" sx={{ flexGrow: 1 }}>
+        <Toolbar sx={{ mb: { xs: 2, sm: 4 } }} />
+        <Outlet />
       </Box>
-
+      
       <Footer />
     </Box>
   );
