@@ -7,6 +7,7 @@ import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import './styles/globals.css';
+import './styles/animations.css';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

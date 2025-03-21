@@ -134,23 +134,32 @@ export const createRipple = (event: React.MouseEvent<HTMLElement>) => {
 };
 
 /**
- * Initialize animation observer for on-scroll animations
+ * Initialize scroll animations for elements with animation classes
  */
-export const initScrollAnimations = () => {
-  if (typeof window !== 'undefined') {
-    const animatedElements = document.querySelectorAll('.animate-on-scroll');
-    
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
+export const initScrollAnimations = (): void => {
+  const animateElements = document.querySelectorAll(
+    '.animate-fade-in, .animate-slide-up, .animate-slide-right, .animate-scale-in'
+  );
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          entry.target.classList.add('animate-visible');
+          entry.target.classList.add('visible');
           observer.unobserve(entry.target);
         }
       });
-    }, { threshold: 0.1 });
-    
-    animatedElements.forEach(element => {
-      observer.observe(element);
-    });
-  }
+    },
+    {
+      root: null,
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px',
+    }
+  );
+
+  animateElements.forEach((element) => {
+    // Reset visibility
+    element.classList.remove('visible');
+    observer.observe(element);
+  });
 }; 
