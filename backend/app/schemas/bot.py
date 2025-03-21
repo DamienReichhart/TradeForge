@@ -14,6 +14,7 @@ class BotBase(BaseModel):
     sell_condition: Optional[str] = None
     telegram_channel: Optional[str] = None
     is_active: Optional[bool] = None
+    bot_type: Optional[str] = "standard"  # "standard" or "advanced"
 
 # Properties to receive on bot creation
 class BotCreate(BotBase):
@@ -22,10 +23,14 @@ class BotCreate(BotBase):
     timeframe: str
     buy_condition: Optional[str] = None
     sell_condition: Optional[str] = None
+    tp_condition: Optional[str] = None  # Take profit calculation (for advanced bots)
+    sl_condition: Optional[str] = None  # Stop loss calculation (for advanced bots)
     indicators: Optional[List[BotIndicatorCreate]] = []
 
 # Properties to receive on bot update
 class BotUpdate(BotBase):
+    tp_condition: Optional[str] = None  # Take profit calculation (for advanced bots)
+    sl_condition: Optional[str] = None  # Stop loss calculation (for advanced bots)
     indicators: Optional[List[BotIndicatorCreate]] = None
 
 # Status update

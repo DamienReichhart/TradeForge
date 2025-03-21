@@ -63,6 +63,9 @@ const NewBotPage: React.FC = () => {
     timeframe: '1h',
     buy_condition: '', // Added for condition editor
     sell_condition: '', // Added for condition editor
+    tp_condition: '', // Take Profit condition for advanced bots
+    sl_condition: '', // Stop Loss condition for advanced bots
+    bot_type: 'standard', // 'standard' or 'advanced'
     indicators: [] as SelectedIndicator[],
   });
   
@@ -71,7 +74,7 @@ const NewBotPage: React.FC = () => {
   const [selectedIndicatorName, setSelectedIndicatorName] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeConditionField, setActiveConditionField] = useState<'buy_condition' | 'sell_condition'>('buy_condition');
+  const [activeConditionField, setActiveConditionField] = useState<'buy_condition' | 'sell_condition' | 'tp_condition' | 'sl_condition'>('buy_condition');
   
   const timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '1w'];
   const pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'SOL/USDT', 'DOGE/USDT'];
@@ -135,8 +138,14 @@ const NewBotPage: React.FC = () => {
   // Function to add a string to the currently focused condition field
   const addToConditionField = (value: string) => {
     const isInsideFunction = value.includes('()') || value.includes('(,)');
-    const isBuyCondition = activeConditionField === 'buy_condition';
-    const currentValue = isBuyCondition ? formData.buy_condition : formData.sell_condition;
+    const fieldMap = {
+      'buy_condition': formData.buy_condition,
+      'sell_condition': formData.sell_condition,
+      'tp_condition': formData.tp_condition,
+      'sl_condition': formData.sl_condition
+    };
+    
+    const currentValue = fieldMap[activeConditionField];
     
     // Get the field element
     const fieldElement = document.getElementById(activeConditionField) as HTMLTextAreaElement;
@@ -164,11 +173,10 @@ const NewBotPage: React.FC = () => {
       newValue = beforeCursor + adjustedValue + afterCursor;
       
       // Set the new value in the state
-      if (isBuyCondition) {
-        setFormData({ ...formData, buy_condition: newValue });
-      } else {
-        setFormData({ ...formData, sell_condition: newValue });
-      }
+      setFormData({
+        ...formData,
+        [activeConditionField]: newValue
+      });
       
       // Set cursor position inside the parentheses after the state update
       setTimeout(() => {
@@ -185,11 +193,10 @@ const NewBotPage: React.FC = () => {
       newValue = beforeCursor + value + afterCursor;
       
       // Set the new value in the state
-      if (isBuyCondition) {
-        setFormData({ ...formData, buy_condition: newValue });
-      } else {
-        setFormData({ ...formData, sell_condition: newValue });
-      }
+      setFormData({
+        ...formData,
+        [activeConditionField]: newValue
+      });
       
       // Set cursor position after the inserted text
       setTimeout(() => {
@@ -644,6 +651,40 @@ const NewBotPage: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
+
+            <Grid item xs={12}>
+              <Divider sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Bot Type
+                </Typography>
+              </Divider>
+              
+              <Box sx={{ display: 'flex', gap: 4 }}>
+                <Button 
+                  variant={formData.bot_type === 'standard' ? 'contained' : 'outlined'}
+                  onClick={() => setFormData({ ...formData, bot_type: 'standard' })}
+                  fullWidth
+                >
+                  Standard Bot
+                </Button>
+                
+                <Button 
+                  variant={formData.bot_type === 'advanced' ? 'contained' : 'outlined'}
+                  onClick={() => setFormData({ ...formData, bot_type: 'advanced' })}
+                  fullWidth
+                >
+                  Advanced Bot
+                </Button>
+              </Box>
+              
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {formData.bot_type === 'standard' 
+                    ? 'Standard bot: Single active trade with simple buy and sell conditions.' 
+                    : 'Advanced bot: Adds take profit and stop loss calculation capabilities.'}
+                </Typography>
+              </Box>
+            </Grid>
             
             <Grid item xs={12}>
               <Divider sx={{ mb: 2 }}>
@@ -802,13 +843,77 @@ const NewBotPage: React.FC = () => {
                 fullWidth
                 id="sell_condition"
                 name="sell_condition"
-                placeholder="e.g., current_price < sma or rsi > 70"
+                placeholder="e.g., current_price < sma or close < ema"
                 value={formData.sell_condition}
                 onChange={handleChange}
                 onFocus={() => setActiveConditionField('sell_condition')}
                 multiline
                 rows={2}
+                sx={{ mb: 2 }}
               />
+              
+              {formData.bot_type === 'advanced' && (
+                <Box sx={{ mt: 2 }}>
+                  <Divider sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Advanced Bot Settings
+                    </Typography>
+                  </Divider>
+                  
+                  <Box sx={{ mb: 2, p: 2, bgcolor: 'info.main', color: 'white', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Take Profit & Stop Loss Conditions:
+                    </Typography>
+                    <Typography variant="body2">
+                      1. Enter a numeric calculation that will resolve to a percentage or direct price
+                    </Typography>
+                    <Typography variant="body2">
+                      2. If the result is less than 10, it will be treated as a percentage of entry price
+                    </Typography>
+                    <Typography variant="body2">
+                      3. If the result is 10 or greater, it will be treated as a direct price target
+                    </Typography>
+                    <Typography variant="body2">
+                      Example TP: <strong>5</strong> (5% above entry price) or <strong>50000</strong> (direct price of 50000)
+                    </Typography>
+                    <Typography variant="body2">
+                      Example SL: <strong>3</strong> (3% below entry price) or <strong>45000</strong> (direct price of 45000)
+                    </Typography>
+                  </Box>
+                  
+                  <Typography variant="subtitle2" gutterBottom>
+                    Take Profit Condition:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    id="tp_condition"
+                    name="tp_condition"
+                    placeholder="e.g., 5 (for 5% TP) or atr * 2 (dynamic TP based on ATR)"
+                    value={formData.tp_condition}
+                    onChange={handleChange}
+                    onFocus={() => setActiveConditionField('tp_condition')}
+                    multiline
+                    rows={2}
+                    sx={{ mb: 2 }}
+                  />
+                  
+                  <Typography variant="subtitle2" gutterBottom>
+                    Stop Loss Condition:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    id="sl_condition"
+                    name="sl_condition"
+                    placeholder="e.g., 3 (for 3% SL) or atr * 1.5 (dynamic SL based on ATR)"
+                    value={formData.sl_condition}
+                    onChange={handleChange}
+                    onFocus={() => setActiveConditionField('sl_condition')}
+                    multiline
+                    rows={2}
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
+              )}
             </Grid>
           </Grid>
           

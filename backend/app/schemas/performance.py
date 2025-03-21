@@ -10,6 +10,8 @@ class TradeBase(BaseModel):
     type: str  # buy, sell
     entry_price: float
     quantity: float
+    tp_price: Optional[float] = None
+    sl_price: Optional[float] = None
 
 # Properties to receive on trade creation
 class TradeCreate(TradeBase):
@@ -21,6 +23,7 @@ class TradeUpdate(BaseModel):
     exit_price: float
     exit_time: datetime
     status: str = "closed"
+    exit_reason: Optional[str] = None  # "tp", "sl", "manual", "sell_condition"
     profit_loss: Optional[float] = None
     profit_loss_percent: Optional[float] = None
 
@@ -28,6 +31,7 @@ class TradeUpdate(BaseModel):
 class TradeInDBBase(TradeBase):
     id: int
     exit_price: Optional[float] = None
+    exit_reason: Optional[str] = None
     profit_loss: Optional[float] = None
     profit_loss_percent: Optional[float] = None
     status: str

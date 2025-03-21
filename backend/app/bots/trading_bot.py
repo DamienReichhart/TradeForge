@@ -30,6 +30,9 @@ class TradingBot:
         db_session: Session,
         telegram_channel: Optional[str] = None,
         check_interval: int = 60,  # seconds
+        bot_type: str = "standard",
+        tp_condition: Optional[str] = None,
+        sl_condition: Optional[str] = None
     ):
         self.bot_id = bot_id
         self.pair = pair
@@ -39,6 +42,9 @@ class TradingBot:
         self.db_session = db_session
         self.telegram_channel = telegram_channel
         self.check_interval = check_interval
+        self.bot_type = bot_type
+        self.tp_condition = tp_condition
+        self.sl_condition = sl_condition
         
         self.running = False
         self.thread = None
@@ -157,11 +163,28 @@ class TradingBot:
             if open_trade:
                 # We have an open trade, check sell condition
                 try:
+                    # For advanced bots, also check TP/SL levels
+                    if self.bot_type == "advanced" and (open_trade.tp_price or open_trade.sl_price):
+                        current_price = last_row.get('close', 0)
+                        
+                        # Check if TP hit
+                        if open_trade.tp_price and current_price >= open_trade.tp_price:
+                            # Close trade at TP
+                            self._close_trade(open_trade, last_row, exit_reason="tp")
+                            return
+                        
+                        # Check if SL hit
+                        if open_trade.sl_price and current_price <= open_trade.sl_price:
+                            # Close trade at SL
+                            self._close_trade(open_trade, last_row, exit_reason="sl")
+                            return
+                    
+                    # Check sell condition for both standard and advanced bots
                     sell_result = eval(self.sell_condition, {"np": np, "pd": pd}, last_row)
                     
                     if sell_result:
                         # Close the trade
-                        self._close_trade(open_trade, last_row)
+                        self._close_trade(open_trade, last_row, exit_reason="sell_condition")
                 except Exception as e:
                     logger.error(f"Error evaluating sell condition: {e}")
                     traceback.print_exc()
@@ -195,6 +218,44 @@ class TradingBot:
             if not entry_price:
                 logger.error("No entry price available")
                 return
+
+            # Calculate TP and SL values for advanced bots
+            tp_price = None
+            sl_price = None
+            
+            if self.bot_type == "advanced" and self.tp_condition:
+                try:
+                    # Evaluate TP condition to get a multiplier or direct price
+                    tp_result = eval(self.tp_condition, {"np": np, "pd": pd}, data)
+                    
+                    # Check if tp_result is a number (percentage/multiplier or direct price)
+                    if isinstance(tp_result, (int, float)):
+                        # If tp_result > 10, assume it's a direct price
+                        if abs(tp_result) > 10:
+                            tp_price = tp_result
+                        else:
+                            # It's a multiplier/percentage
+                            tp_price = entry_price * (1 + tp_result / 100)
+                except Exception as e:
+                    logger.error(f"Error calculating TP price: {e}")
+                    traceback.print_exc()
+            
+            if self.bot_type == "advanced" and self.sl_condition:
+                try:
+                    # Evaluate SL condition to get a multiplier or direct price
+                    sl_result = eval(self.sl_condition, {"np": np, "pd": pd}, data)
+                    
+                    # Check if sl_result is a number (percentage/multiplier or direct price)
+                    if isinstance(sl_result, (int, float)):
+                        # If sl_result > 10, assume it's a direct price
+                        if abs(sl_result) > 10:
+                            sl_price = sl_result
+                        else:
+                            # It's a multiplier/percentage
+                            sl_price = entry_price * (1 - sl_result / 100)
+                except Exception as e:
+                    logger.error(f"Error calculating SL price: {e}")
+                    traceback.print_exc()
             
             # Create a new trade
             trade = models.Trade(
@@ -203,6 +264,8 @@ class TradingBot:
                 timeframe=self.timeframe,
                 type="buy",
                 entry_price=entry_price,
+                tp_price=tp_price,
+                sl_price=sl_price,
                 quantity=1.0,  # Fixed quantity for simplicity
                 status="open",
                 entry_time=pd.to_datetime(data.name),  # Use index as timestamp
@@ -222,6 +285,20 @@ class TradingBot:
                 bot = self.db_session.query(models.Bot).filter(models.Bot.id == self.bot_id).first()
                 bot_name = bot.name if bot else f"Bot {self.bot_id}"
                 
+                message_parts = [
+                    f"BUY SIGNAL - {bot_name}",
+                    f"Pair: {self.pair}",
+                    f"Price: {entry_price}"
+                ]
+                
+                if tp_price:
+                    message_parts.append(f"Take Profit: {tp_price}")
+                
+                if sl_price:
+                    message_parts.append(f"Stop Loss: {sl_price}")
+                
+                message = "\n\n".join(message_parts)
+                
                 telegram.send_trade_signal(
                     chat_id=self.telegram_channel,
                     bot_name=bot_name,
@@ -235,7 +312,7 @@ class TradingBot:
             logger.error(f"Error opening trade: {e}")
             traceback.print_exc()
     
-    def _close_trade(self, trade: models.Trade, data: Dict[str, Any]):
+    def _close_trade(self, trade: models.Trade, data: Dict[str, Any], exit_reason: str = "sell_condition"):
         """Close an existing trade based on the current data"""
         try:
             # For simplicity, we'll use the close price
@@ -255,11 +332,12 @@ class TradingBot:
             trade.profit_loss = profit_loss
             trade.profit_loss_percent = profit_loss_percent
             trade.status = "closed"
+            trade.exit_reason = exit_reason
             
             self.db_session.add(trade)
             self.db_session.commit()
             
-            logger.info(f"Closed trade {trade.id} at price {exit_price} with P/L: {profit_loss:.2f} ({profit_loss_percent:.2f}%)")
+            logger.info(f"Closed trade {trade.id} at price {exit_price} with P/L: {profit_loss:.2f} ({profit_loss_percent:.2f}%) - Exit Reason: {exit_reason}")
             
             # Send Telegram notification if configured
             if self.telegram_channel:
@@ -270,7 +348,8 @@ class TradingBot:
                 message += f"Pair: {self.pair}\n"
                 message += f"Price: {exit_price}\n"
                 message += f"P/L: {profit_loss:.2f} ({profit_loss_percent:.2f}%)\n"
-                message += f"Time: {trade.exit_time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                message += f"Time: {trade.exit_time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+                message += f"Exit Reason: {exit_reason}"
                 
                 # Adding indicators values would require storing both the entry and exit indicators
                 # For simplicity, we're just using the basic trade info

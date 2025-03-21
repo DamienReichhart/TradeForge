@@ -1,10 +1,12 @@
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import logging
 from app.db_init import main as db_init
 from app.core.database import SessionLocal
+import traceback
+from fastapi.responses import JSONResponse
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -29,6 +31,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add this after creating the app instance
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Add exception handler for detailed logging
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(f"Request path: {request.url.path}")
+    logger.error(f"Request method: {request.method}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "message": str(exc)},
+    )
 
 # Include API router
 from app.api.api import api_router

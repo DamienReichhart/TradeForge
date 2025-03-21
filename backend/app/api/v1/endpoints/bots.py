@@ -1,6 +1,8 @@
 from typing import Any, List, Dict
 import threading
 from datetime import datetime
+import logging
+import traceback
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -55,76 +57,132 @@ def create_bot(
     """
     Create new trading bot.
     """
-    # Check the bot limit based on user's subscription
-    if current_user.subscription:
-        bot_limit = current_user.subscription.bot_limit
-    else:
-        # Default limit for users without a subscription
-        bot_limit = 1
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Bot creation request received: {bot_in.dict()}")
     
-    # Get the count of user's active bots
-    bot_count = db.query(func.count(models.Bot.id)).filter(
-        models.Bot.user_id == current_user.id,
-        models.Bot.is_active == True
-    ).scalar()
-    
-    if bot_count >= bot_limit:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Bot limit reached. Your subscription allows {bot_limit} active bots.",
-        )
-    
-    bot = models.Bot(
-        name=bot_in.name,
-        description=bot_in.description,
-        pair=bot_in.pair,
-        timeframe=bot_in.timeframe,
-        buy_condition=bot_in.buy_condition,
-        sell_condition=bot_in.sell_condition,
-        telegram_channel=bot_in.telegram_channel,
-        is_active=True,
-        is_running=False,
-        user_id=current_user.id,
-    )
-    db.add(bot)
-    db.commit()
-    db.refresh(bot)
-    
-    # Add indicators if specified
-    if bot_in.indicators:
-        for indicator_data in bot_in.indicators:
-            # Check if the indicator exists in the database
-            indicator = db.query(models.Indicator).filter(
-                models.Indicator.id == indicator_data.indicator_id,
-                models.Indicator.is_active == True
-            ).first()
+    try:
+        # Check the bot limit based on user's subscription
+        if current_user.subscription:
+            bot_limit = current_user.subscription.bot_limit
+        else:
+            # Default limit for users without a subscription
+            bot_limit = 1
+        
+        # Get the count of user's active bots
+        bot_count = db.query(func.count(models.Bot.id)).filter(
+            models.Bot.user_id == current_user.id,
+            models.Bot.is_active == True
+        ).scalar()
+        
+        logger.debug(f"User has {bot_count} active bots out of {bot_limit} allowed")
+        
+        if bot_count >= bot_limit:
+            logger.warning(f"Bot limit reached for user {current_user.id}. Limit: {bot_limit}, Count: {bot_count}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bot limit reached. Your subscription allows {bot_limit} active bots.",
+            )
+        
+        # Validate buy/sell conditions
+        if not bot_in.buy_condition:
+            logger.warning("Missing buy_condition in bot creation request")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Buy condition is required for standard bots",
+            )
             
-            if not indicator:
-                # Try to sync indicator from registry if not found
-                from app.db_init import init_indicators
-                init_indicators(db)
-                
-                # Check again after sync
+        if not bot_in.sell_condition:
+            logger.warning("Missing sell_condition in bot creation request")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sell condition is required for standard bots",
+            )
+        
+        bot = models.Bot(
+            name=bot_in.name,
+            description=bot_in.description,
+            pair=bot_in.pair,
+            timeframe=bot_in.timeframe,
+            buy_condition=bot_in.buy_condition,
+            sell_condition=bot_in.sell_condition,
+            telegram_channel=bot_in.telegram_channel,
+            bot_type=bot_in.bot_type,
+            tp_condition=bot_in.tp_condition if bot_in.bot_type == "advanced" else None,
+            sl_condition=bot_in.sl_condition if bot_in.bot_type == "advanced" else None,
+            is_active=True,
+            is_running=False,
+            user_id=current_user.id,
+        )
+        
+        db.add(bot)
+        db.commit()
+        db.refresh(bot)
+        
+        # Add indicators if specified
+        if bot_in.indicators:
+            logger.debug(f"Processing {len(bot_in.indicators)} indicators for bot {bot.id}")
+            for indicator_data in bot_in.indicators:
+                logger.debug(f"Processing indicator {indicator_data.indicator_id}")
+                # Check if the indicator exists in the database
                 indicator = db.query(models.Indicator).filter(
                     models.Indicator.id == indicator_data.indicator_id,
                     models.Indicator.is_active == True
                 ).first()
                 
                 if not indicator:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Indicator with id {indicator_data.indicator_id} not found in database. Please contact administrator."
-                    )
+                    logger.warning(f"Indicator {indicator_data.indicator_id} not found. Attempting to sync.")
+                    # Try to sync indicator from registry if not found
+                    from app.db_init import init_indicators
+                    init_indicators(db)
+                    
+                    # Check again after sync
+                    indicator = db.query(models.Indicator).filter(
+                        models.Indicator.id == indicator_data.indicator_id,
+                        models.Indicator.is_active == True
+                    ).first()
+                    
+                    if not indicator:
+                        logger.error(f"Indicator {indicator_data.indicator_id} not found even after sync. Rolling back.")
+                        db.delete(bot)
+                        db.commit()
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Indicator with id {indicator_data.indicator_id} not found in database. Please contact administrator."
+                        )
+                
+                logger.debug(f"Adding indicator {indicator.name} to bot {bot.id}")
+                bot_indicator = models.BotIndicator(
+                    bot_id=bot.id,
+                    indicator_id=indicator_data.indicator_id,
+                    parameters=indicator_data.parameters,
+                )
+                db.add(bot_indicator)
             
-            bot_indicator = models.BotIndicator(
-                bot_id=bot.id,
-                indicator_id=indicator_data.indicator_id,
-                parameters=indicator_data.parameters,
-            )
-            db.add(bot_indicator)
-        db.commit()
-    
-    return bot
+            try:
+                db.commit()
+            except Exception as e:
+                logger.error(f"Error adding indicators: {str(e)}")
+                db.rollback()
+                db.delete(bot)
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error adding indicators: {str(e)}",
+                )
+        
+        logger.info(f"Bot {bot.id} created successfully")
+        return bot
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error creating bot: {str(e)}")
+        logger.error(f"Exception details: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating bot: {str(e)}",
+        )
 
 @router.get("/{bot_id}", response_model=schemas.BotWithIndicators)
 def read_bot(
@@ -313,7 +371,10 @@ def start_bot(
         buy_condition=bot.buy_condition,
         sell_condition=bot.sell_condition,
         db_session=db,
-        telegram_channel=bot.telegram_channel
+        telegram_channel=bot.telegram_channel,
+        bot_type=bot.bot_type,
+        tp_condition=bot.tp_condition,
+        sl_condition=bot.sl_condition
     )
     
     # Start the bot in a background thread

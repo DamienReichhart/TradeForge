@@ -14,6 +14,9 @@ class Trade(Base):
     type = Column(String, nullable=False)  # buy, sell
     entry_price = Column(Float, nullable=False)
     exit_price = Column(Float)
+    tp_price = Column(Float)  # Take profit target price
+    sl_price = Column(Float)  # Stop loss target price
+    exit_reason = Column(String)  # Can be "tp", "sl", "manual", "sell_condition", "buy_condition"
     quantity = Column(Float, nullable=False)
     profit_loss = Column(Float)
     profit_loss_percent = Column(Float)

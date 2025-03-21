@@ -14,7 +14,10 @@ class Bot(Base):
     timeframe = Column(String, nullable=False)
     buy_condition = Column(Text)
     sell_condition = Column(Text)
+    tp_condition = Column(Text)  # Take profit calculation for advanced bots
+    sl_condition = Column(Text)  # Stop loss calculation for advanced bots
     telegram_channel = Column(String)
+    bot_type = Column(String, default="standard")  # "standard" or "advanced"
     is_active = Column(Boolean, default=False)
     is_running = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

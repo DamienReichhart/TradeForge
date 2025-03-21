@@ -1,12 +1,12 @@
 import axios from 'axios';
 
-// Get the API URL from environment variable with fallback
-const API_URL = process.env.REACT_APP_API_URL || 'http://api.tradeforge.apextradelogic.com:11101/api/v1';
-console.log('API URL: ', API_URL);
+// Use environment variable:
+const API_BASE_URL = process.env.REACT_APP_API_URL;
+console.log('API URL: ', API_BASE_URL);
 
 // Base API instance
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
