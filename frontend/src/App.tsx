@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { initScrollAnimations } from './utils/animations';
 
@@ -10,6 +10,14 @@ import DashboardLayout from './components/layouts/DashboardLayout';
 // Public Pages
 import HomePage from './pages/HomePage';
 import PricingPage from './pages/PricingPage';
+import FeaturesPage from './pages/FeaturesPage';
+import DocumentationPage from './pages/DocumentationPage';
+import AboutUsPage from './pages/AboutUsPage';
+import ContactPage from './pages/ContactPage';
+import CareersPage from './pages/CareersPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import CookiesPage from './pages/CookiesPage';
 import HelpPage from './pages/HelpPage';
 import TutorialPage from './pages/TutorialPage';
 import OpinionsPage from './pages/OpinionsPage';
@@ -40,30 +48,31 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  // Initialize scroll animations on component mount
+  const location = useLocation();
+  
+  // Initialize scroll animations on component mount and route changes
   useEffect(() => {
-    initScrollAnimations();
-    
-    // Re-initialize when route changes
-    const handleRouteChange = () => {
-      setTimeout(() => {
-        initScrollAnimations();
-      }, 100);
-    };
-    
-    window.addEventListener('popstate', handleRouteChange);
-    
-    return () => {
-      window.removeEventListener('popstate', handleRouteChange);
-    };
-  }, []);
+    // Short timeout to ensure the DOM has updated
+    setTimeout(() => {
+      initScrollAnimations();
+      window.scrollTo(0, 0); // Scroll to top on route change
+    }, 100);
+  }, [location.pathname]); // Re-run when the path changes
   
   return (
     <Routes>
       {/* Public routes with main layout */}
       <Route path="/" element={<MainLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="features" element={<FeaturesPage />} />
         <Route path="pricing" element={<PricingPage />} />
+        <Route path="documentation" element={<DocumentationPage />} />
+        <Route path="about" element={<AboutUsPage />} />
+        <Route path="contact" element={<ContactPage />} />
+        <Route path="careers" element={<CareersPage />} />
+        <Route path="terms" element={<TermsPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
+        <Route path="cookies" element={<CookiesPage />} />
         <Route path="help" element={<HelpPage />} />
         <Route path="help/:tutorialSlug" element={<TutorialPage />} />
         <Route path="opinions" element={<OpinionsPage />} />

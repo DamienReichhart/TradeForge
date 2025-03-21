@@ -55,6 +55,28 @@ services:
     extra_hosts:
       - "api.tradeforge.apextradelogic.com:10.10.0.3"
 
+  cloudflared-frontend:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run --token token
+    environment:
+      - TUNNEL_TOKEN=token
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.5
+    
+  cloudflared-backend:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run --token token
+    environment:
+      - TUNNEL_TOKEN=token
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.6
+
+
+
 networks:
   tradeforge-network:
     driver: bridge

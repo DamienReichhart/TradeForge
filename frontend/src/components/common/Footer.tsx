@@ -141,7 +141,7 @@ const Footer: React.FC = () => {
               <Box component="li" sx={{ mb: 1 }}>
                 <Link 
                   component={RouterLink} 
-                  to="/help" 
+                  to="/documentation" 
                   color="text.secondary"
                   underline="hover"
                   className="btn-hover"
