@@ -294,16 +294,6 @@ const DashboardLayout: React.FC = () => {
               </IconButton>
             </Tooltip>
             
-            <Tooltip title="Dark Mode">
-              <IconButton 
-                color="inherit"
-                className="btn-hover"
-                sx={{ mx: 0.5 }}
-              >
-                <NightlightIcon />
-              </IconButton>
-            </Tooltip>
-            
             <Tooltip title="Notifications">
               <IconButton 
                 color="inherit"

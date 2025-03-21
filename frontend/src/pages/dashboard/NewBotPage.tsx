@@ -71,6 +71,7 @@ const NewBotPage: React.FC = () => {
   const [selectedIndicatorName, setSelectedIndicatorName] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeConditionField, setActiveConditionField] = useState<'buy_condition' | 'sell_condition'>('buy_condition');
   
   const timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '1w'];
   const pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'SOL/USDT', 'DOGE/USDT'];
@@ -85,6 +86,121 @@ const NewBotPage: React.FC = () => {
     { name: 'close', description: 'Closing price of the current candle' },
     { name: 'volume', description: 'Volume of the current candle' }
   ];
+  
+  // Available mathematical operators
+  const mathOperators = [
+    { symbol: '+', description: 'Addition' },
+    { symbol: '-', description: 'Subtraction' },
+    { symbol: '*', description: 'Multiplication' },
+    { symbol: '/', description: 'Division' },
+    { symbol: '>', description: 'Greater than' },
+    { symbol: '<', description: 'Less than' },
+    { symbol: '>=', description: 'Greater than or equal to' },
+    { symbol: '<=', description: 'Less than or equal to' },
+    { symbol: '==', description: 'Equal to' },
+    { symbol: '!=', description: 'Not equal to' },
+    { symbol: 'and', description: 'Logical AND' },
+    { symbol: 'or', description: 'Logical OR' },
+    { symbol: 'not', description: 'Logical NOT' },
+    { symbol: '(', description: 'Opening parenthesis' },
+    { symbol: ')', description: 'Closing parenthesis' },
+    { symbol: '%', description: 'Modulo (remainder)' },
+    { symbol: '**', description: 'Exponentiation (power)' }
+  ];
+  
+  // Available mathematical functions
+  const mathFunctions = [
+    { name: 'abs(x)', description: 'Absolute value', insertText: 'abs()' },
+    { name: 'max(x,y)', description: 'Maximum of two values', insertText: 'max(,)' },
+    { name: 'min(x,y)', description: 'Minimum of two values', insertText: 'min(,)' },
+    { name: 'round(x)', description: 'Round to nearest integer', insertText: 'round()' },
+    { name: 'floor(x)', description: 'Round down to nearest integer', insertText: 'floor()' },
+    { name: 'ceil(x)', description: 'Round up to nearest integer', insertText: 'ceil()' },
+    { name: 'sqrt(x)', description: 'Square root', insertText: 'sqrt()' },
+    { name: 'pow(x,y)', description: 'x raised to power y', insertText: 'pow(,)' }
+  ];
+  
+  // Common numerical constants
+  const numericalConstants = [
+    { value: '0', description: 'Zero' },
+    { value: '1', description: 'One' },
+    { value: '10', description: 'Ten' },
+    { value: '50', description: 'Fifty' },
+    { value: '70', description: 'Seventy (common RSI overbought level)' },
+    { value: '30', description: 'Thirty (common RSI oversold level)' },
+    { value: '100', description: 'One hundred' },
+    { value: '200', description: 'Two hundred (common for 200-period MA)' }
+  ];
+  
+  // Function to add a string to the currently focused condition field
+  const addToConditionField = (value: string) => {
+    const isInsideFunction = value.includes('()') || value.includes('(,)');
+    const isBuyCondition = activeConditionField === 'buy_condition';
+    const currentValue = isBuyCondition ? formData.buy_condition : formData.sell_condition;
+    
+    // Get the field element
+    const fieldElement = document.getElementById(activeConditionField) as HTMLTextAreaElement;
+    
+    // Get cursor position
+    const cursorPos = fieldElement?.selectionStart || currentValue.length;
+    
+    // Create new value with insertion
+    let newValue;
+    if (isInsideFunction) {
+      // For functions, insert value and position cursor inside parentheses
+      const beforeCursor = currentValue.substring(0, cursorPos);
+      const afterCursor = currentValue.substring(cursorPos);
+      
+      // Replace parentheses for proper cursor placement
+      let adjustedValue = value;
+      let cursorAdjustment = 1; // Default - position after first parenthesis
+      
+      if (value.includes('(,)')) {
+        // For functions with multiple arguments, position after first comma
+        adjustedValue = value.replace('(,)', '(,)');
+        cursorAdjustment = 1; // Position after first (
+      }
+      
+      newValue = beforeCursor + adjustedValue + afterCursor;
+      
+      // Set the new value in the state
+      if (isBuyCondition) {
+        setFormData({ ...formData, buy_condition: newValue });
+      } else {
+        setFormData({ ...formData, sell_condition: newValue });
+      }
+      
+      // Set cursor position inside the parentheses after the state update
+      setTimeout(() => {
+        if (fieldElement) {
+          const newPos = cursorPos + adjustedValue.indexOf('(') + cursorAdjustment;
+          fieldElement.focus();
+          fieldElement.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    } else {
+      // For normal operators and variables
+      const beforeCursor = currentValue.substring(0, cursorPos);
+      const afterCursor = currentValue.substring(cursorPos);
+      newValue = beforeCursor + value + afterCursor;
+      
+      // Set the new value in the state
+      if (isBuyCondition) {
+        setFormData({ ...formData, buy_condition: newValue });
+      } else {
+        setFormData({ ...formData, sell_condition: newValue });
+      }
+      
+      // Set cursor position after the inserted text
+      setTimeout(() => {
+        if (fieldElement) {
+          const newPos = cursorPos + value.length;
+          fieldElement.focus();
+          fieldElement.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    }
+  };
   
   useEffect(() => {
     const fetchData = async () => {
@@ -284,27 +400,81 @@ const NewBotPage: React.FC = () => {
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => {
-                  const currentValue = document.activeElement?.id === 'buy_condition' 
-                    ? formData.buy_condition 
-                    : document.activeElement?.id === 'sell_condition'
-                      ? formData.sell_condition
-                      : '';
-                  
-                  if (document.activeElement?.id === 'buy_condition') {
-                    setFormData({
-                      ...formData,
-                      buy_condition: currentValue + variable.name
-                    });
-                  } else if (document.activeElement?.id === 'sell_condition') {
-                    setFormData({
-                      ...formData,
-                      sell_condition: currentValue + variable.name
-                    });
-                  }
-                }}
+                onClick={() => addToConditionField(variable.name)}
               >
                 {variable.name}
+              </Button>
+            </Tooltip>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
+  
+  const renderMathOperators = () => (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="subtitle2" gutterBottom>
+        Mathematical Operators:
+      </Typography>
+      <Grid container spacing={1}>
+        {mathOperators.map((operator) => (
+          <Grid item key={operator.symbol}>
+            <Tooltip title={operator.description}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                onClick={() => addToConditionField(' ' + operator.symbol + ' ')}
+              >
+                {operator.symbol}
+              </Button>
+            </Tooltip>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
+  
+  const renderMathFunctions = () => (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="subtitle2" gutterBottom>
+        Mathematical Functions:
+      </Typography>
+      <Grid container spacing={1}>
+        {mathFunctions.map((func) => (
+          <Grid item key={func.name}>
+            <Tooltip title={func.description}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="info"
+                onClick={() => addToConditionField(func.insertText)}
+              >
+                {func.name}
+              </Button>
+            </Tooltip>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
+  
+  const renderNumericalConstants = () => (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="subtitle2" gutterBottom>
+        Numerical Constants:
+      </Typography>
+      <Grid container spacing={1}>
+        {numericalConstants.map((constant) => (
+          <Grid item key={constant.value}>
+            <Tooltip title={constant.description}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                onClick={() => addToConditionField(constant.value)}
+              >
+                {constant.value}
               </Button>
             </Tooltip>
           </Grid>
@@ -340,26 +510,7 @@ const NewBotPage: React.FC = () => {
                         size="small"
                         variant="outlined"
                         color="secondary"
-                        onClick={() => {
-                          const varName = `ind_${index}_${key}`;
-                          const currentValue = document.activeElement?.id === 'buy_condition' 
-                            ? formData.buy_condition 
-                            : document.activeElement?.id === 'sell_condition'
-                              ? formData.sell_condition
-                              : '';
-                          
-                          if (document.activeElement?.id === 'buy_condition') {
-                            setFormData({
-                              ...formData,
-                              buy_condition: currentValue + varName
-                            });
-                          } else if (document.activeElement?.id === 'sell_condition') {
-                            setFormData({
-                              ...formData,
-                              sell_condition: currentValue + varName
-                            });
-                          }
-                        }}
+                        onClick={() => addToConditionField(`ind_${index}_${key}`)}
                       >
                         ind_{index}_{key}
                       </Button>
@@ -382,25 +533,7 @@ const NewBotPage: React.FC = () => {
                           size="small"
                           variant="outlined"
                           color="primary"
-                          onClick={() => {
-                            const currentValue = document.activeElement?.id === 'buy_condition' 
-                              ? formData.buy_condition 
-                              : document.activeElement?.id === 'sell_condition'
-                                ? formData.sell_condition
-                                : '';
-                            
-                            if (document.activeElement?.id === 'buy_condition') {
-                              setFormData({
-                                ...formData,
-                                buy_condition: currentValue + directVarName
-                              });
-                            } else if (document.activeElement?.id === 'sell_condition') {
-                              setFormData({
-                                ...formData,
-                                sell_condition: currentValue + directVarName
-                              });
-                            }
-                          }}
+                          onClick={() => addToConditionField(directVarName)}
                         >
                           {directVarName}
                         </Button>
@@ -622,7 +755,28 @@ const NewBotPage: React.FC = () => {
                 You can use both indexed indicator references (e.g., ind_0_sma) and direct indicator names (e.g., sma, rsi) in your conditions and mathematical equations.
               </Typography>
               
+              <Box sx={{ mb: 2, p: 2, bgcolor: 'info.main', color: 'white', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  How to Create Conditions:
+                </Typography>
+                <Typography variant="body2">
+                  1. Click in the Buy or Sell Condition field where you want to insert
+                </Typography>
+                <Typography variant="body2">
+                  2. Click on any variable, operator, function or number below to add it at cursor position
+                </Typography>
+                <Typography variant="body2">
+                  3. For functions like max() or min(), the cursor will be positioned inside the parentheses
+                </Typography>
+                <Typography variant="body2">
+                  Example condition: <strong>close {'>'} sma and rsi {'<'} 30</strong>
+                </Typography>
+              </Box>
+              
               {renderVariablesHelp()}
+              {renderMathOperators()}
+              {renderMathFunctions()}
+              {renderNumericalConstants()}
               {renderIndicatorVariablesHelp()}
               
               <Typography variant="subtitle2" gutterBottom>
@@ -635,6 +789,7 @@ const NewBotPage: React.FC = () => {
                 placeholder="e.g., current_price > sma or close > ema"
                 value={formData.buy_condition}
                 onChange={handleChange}
+                onFocus={() => setActiveConditionField('buy_condition')}
                 multiline
                 rows={2}
                 sx={{ mb: 2 }}
@@ -650,6 +805,7 @@ const NewBotPage: React.FC = () => {
                 placeholder="e.g., current_price < sma or rsi > 70"
                 value={formData.sell_condition}
                 onChange={handleChange}
+                onFocus={() => setActiveConditionField('sell_condition')}
                 multiline
                 rows={2}
               />
