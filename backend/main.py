@@ -9,6 +9,7 @@ import traceback
 from fastapi.responses import JSONResponse
 import os
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator.metrics import request_size, response_size, latency
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -24,8 +25,23 @@ app = FastAPI(
 )
 
 # Setup Prometheus metrics - must be before other middleware
-Instrumentator().instrument(app).expose(app)
-logger.info("Prometheus metrics instrumentation initialized")
+instrumentator = Instrumentator(
+    should_group_status_codes=False,
+    should_ignore_untemplated=True,
+    should_respect_env_var=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=[".*admin.*", "/metrics"],
+    env_var_name="ENABLE_METRICS",
+)
+
+# Add additional metrics
+instrumentator.add(request_size())
+instrumentator.add(response_size())
+instrumentator.add(latency())
+
+# Instrument app and expose metrics at /metrics endpoint
+instrumentator.instrument(app).expose(app)
+logger.info("Prometheus metrics instrumentation initialized at /metrics endpoint")
 
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
