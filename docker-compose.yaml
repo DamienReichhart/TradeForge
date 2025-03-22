@@ -61,6 +61,114 @@ services:
       tradeforge-network:
         ipv4_address: 10.10.0.5
 
+
+  influxdb:
+    image: influxdb:2.7.11
+    container_name: influxdb
+    env_file:
+      - ./env/db_rates.env
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.6
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    restart: unless-stopped
+
+  rates_api:
+    build: ./rates_api
+    container_name: rates_api
+    ports:
+      - "8099:8000"
+    env_file:
+      - ./env/db_rates.env
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.7
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.8
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    env_file:
+      - ./env/grafana.env
+    depends_on:
+      - prometheus
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.9
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -71,7 +179,6 @@ services:
       tradeforge-network:
         ipv4_address: 10.10.0.100
 
-
 networks:
   tradeforge-network:
     driver: bridge
@@ -81,3 +188,6 @@ networks:
 
 volumes:
   postgres_data: 
+  prometheus_data:
+  grafana_data:
+
