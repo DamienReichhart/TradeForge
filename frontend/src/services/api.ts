@@ -80,13 +80,8 @@ export const botsApi = {
   getAll: () => api.get('/bots/'),
   getById: (id: number) => api.get(`/bots/${id}`),
   create: (botData: any) => api.post('/bots/', botData),
-  update: (id: number, botData: any) => api.put(`/bots/${id}`, botData),
-  delete: (id: number) => {
-    // Ensure the URL ends with a trailing slash to avoid redirection
-    const url = `/bots/${id}/`;
-    console.log(`Making delete request to: ${url}`);
-    return api.delete(url);
-  },
+  update: (id: number, botData: any) => api.post(`/bots/${id}/update`, botData),
+  delete: (id: number) => api.post(`/bots/${id}/delete`),
   start: (id: number) => api.post(`/bots/${id}/start`),
   stop: (id: number) => api.post(`/bots/${id}/stop`),
   getPerformance: (id: number) => api.get(`/bots/${id}/performance`),

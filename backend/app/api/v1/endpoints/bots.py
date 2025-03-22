@@ -207,7 +207,7 @@ def read_bot(
     
     return bot
 
-@router.put("/{bot_id}", response_model=schemas.Bot)
+@router.post("/{bot_id}/update", response_model=schemas.Bot)
 def update_bot(
     *,
     db: Session = Depends(get_db),
@@ -286,7 +286,7 @@ def update_bot(
     db.refresh(bot)
     return bot
 
-@router.delete("/{bot_id}", response_model=schemas.Bot)
+@router.post("/{bot_id}/delete", response_model=schemas.Bot)
 def delete_bot(
     *,
     db: Session = Depends(get_db),
