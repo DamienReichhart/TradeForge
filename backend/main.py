@@ -8,6 +8,7 @@ from app.core.database import SessionLocal, engine, Base
 import traceback
 from fastapi.responses import JSONResponse
 import os
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -21,6 +22,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+# Setup Prometheus metrics - must be before other middleware
+Instrumentator().instrument(app).expose(app)
+logger.info("Prometheus metrics instrumentation initialized")
 
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
@@ -76,6 +81,8 @@ async def startup_event():
     logger.info("Running database table creation on startup...")
     db_init()
     logger.info("Indicator initialization complete!")
+    
+    # Prometheus metrics are already initialized before middleware
 
 @app.get("/")
 async def root():

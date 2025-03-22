@@ -8,6 +8,13 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import './styles/globals.css';
 import './styles/animations.css';
+import { setupMetricsEndpoint, trackPageLoad } from './utils/metrics';
+
+// Initialize metrics endpoint for Prometheus
+setupMetricsEndpoint();
+
+// Track the main page load
+trackPageLoad('/');
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
