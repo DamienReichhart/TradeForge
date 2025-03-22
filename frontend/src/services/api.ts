@@ -11,7 +11,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true,
-  // Configure axios to follow redirects and maintain the original HTTP method
+  // Ensure redirects are followed properly
   maxRedirects: 5,
   // This ensures DELETE/PUT methods are preserved during redirects
   validateStatus: function (status) {
@@ -26,18 +26,23 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    // Ensure trailing slashes for endpoints that need them
-    if (config.url && config.url.startsWith('/bots')) {
-      // For paths like /bots/ (collection endpoint)
-      if (config.url === '/bots' && !config.url.endsWith('/')) {
-        config.url = `${config.url}/`;
-      }
-      
-      // For paths with IDs like /bots/123 (excluding paths with further segments like /bots/123/start)
-      if (config.url.match(/^\/bots\/\d+$/) && !config.url.endsWith('/')) {
-        config.url = `${config.url}/`;
-      }
+    
+    // Ensure proper URL formatting
+    if (config.url) {
+      // Remove trailing slash from base URL if present
+      const baseUrl = config.baseURL?.endsWith('/') 
+        ? config.baseURL.slice(0, -1) 
+        : config.baseURL || '';
+        
+      // Handle URL path properly
+      const urlPath = config.url.startsWith('/') 
+        ? config.url 
+        : `/${config.url}`;
+        
+      // Log the complete URL being used
+      console.log('Complete URL:', `${baseUrl}${urlPath}`);
     }
+    
     console.log('Request:', config.method, config.url, config);
     return config;
   },
@@ -54,7 +59,17 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Error:', error.response?.status, error.response?.config?.url, error.response?.data || error.message);
+    console.error('API Error:', 
+      error.response?.status, 
+      error.response?.config?.url, 
+      error.response?.data || error.message
+    );
+    
+    // Handle redirect loops specifically
+    if (error.response?.status === 301 || error.response?.status === 302) {
+      console.error('Redirect detected:', error.response.headers.location);
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -68,7 +83,9 @@ export const authApi = {
         'password': password
       }),
       {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       }
     ),
   register: (userData: any) => api.post('/auth/register', userData),

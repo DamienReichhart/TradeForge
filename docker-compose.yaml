@@ -51,8 +51,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
     ports:
-      - "8080:80"
+      - "443:443"
     depends_on:
       - frontend
       - backend
@@ -60,26 +61,15 @@ services:
       tradeforge-network:
         ipv4_address: 10.10.0.5
 
-##  cloudflared-frontend:
-##    image: cloudflare/cloudflared:latest
-##    restart: unless-stopped
-##    command: tunnel run --token token
-##    environment:
-##      - TUNNEL_TOKEN=token
-##    networks:
-##      tradeforge-network:
-##        ipv4_address: 10.10.0.5
-    
-##  cloudflared-backend:
-##    image: cloudflare/cloudflared:latest
-##    restart: unless-stopped
-##    command: tunnel run --token token
-##    environment:
-##      - TUNNEL_TOKEN=token
-##    networks:
-##      tradeforge-network:
-##        ipv4_address: 10.10.0.6
-
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiNWVmMDRlNzNiODkxMjZlZWQyN2JkMDZmZDFhMTg3NTIiLCJ0IjoiY2I3M2I5OTAtZDBjNy00ZDU0LWI1NjQtZDljMmM0YjRlZTM4IiwicyI6IlpHSTFPVGc1Tm1JdFl6SXdOeTAwWVdZeUxXRm1aVGt0TkRWak1HVTBPRGMzWkRRMSJ9
+    networks:
+      tradeforge-network:
+        ipv4_address: 10.10.0.100
 
 
 networks:
