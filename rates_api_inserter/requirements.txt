@@ -1,0 +1,14 @@
+requests
+tenacity
+python-dotenv
+rpyc>=5.0.1
+bleach==4.1.0
+certifi==2021.10.8
+cffi==1.15.0
+colorama==0.4.4
+cryptography==35.0.0
+docutils==0.18
+idna==3.3
+importlib-metadata==4.8.1
+jeepney==0.7.1
+keyring==23.2.1
