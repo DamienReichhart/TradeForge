@@ -99,8 +99,6 @@ services:
   rates_api:
     build: ./rates_api
     container_name: rates_api
-    ports:
-      - "8099:8000"
     env_file:
       - ./env/db_rates.env
     depends_on:
@@ -120,8 +118,6 @@ services:
   mt5linux:
     build: ./mt5linux
     container_name: mt5linux
-    ports:
-      - "8222:8222"
     volumes:
       - ./mt5linux/config:/root/.wine/drive_c/Program Files/MetaTrader 5/config
       - ./mt5linux/MQL5:/root/.wine/drive_c/users/root/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5
@@ -179,8 +175,6 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-    ports:
-      - "9090:9090"
     networks:
       tradeforge-network:
         ipv4_address: 10.10.0.8
