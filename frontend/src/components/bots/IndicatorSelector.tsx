@@ -29,7 +29,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 // Types
 interface IndicatorParameter {
   name: string;
-  type: string;
+  type: string;  // 'number', 'boolean', 'string', 'select'
   description: string;
   default: any;
   min_value?: number;
@@ -205,7 +205,9 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
         }
       
       case 'string':
+        // Use dropdown for any parameter with options or if name is 'source'
         if (parameter.options) {
+          const options = parameter.options || [];
           return (
             <FormControl fullWidth margin="normal" size="small">
               <InputLabel>{parameter.name}</InputLabel>
@@ -214,7 +216,7 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
                 onChange={(e) => onChange(e.target.value)}
                 label={parameter.name}
               >
-                {parameter.options.map((option) => (
+                {options.map((option) => (
                   <MenuItem key={option} value={option}>
                     {option}
                   </MenuItem>
@@ -271,6 +273,27 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
             >
               <MenuItem value="true">Yes</MenuItem>
               <MenuItem value="false">No</MenuItem>
+            </Select>
+            <Typography variant="caption" color="text.secondary">
+              {parameter.description}
+            </Typography>
+          </FormControl>
+        );
+      
+      case 'select':
+        return (
+          <FormControl fullWidth margin="normal" size="small">
+            <InputLabel>{parameter.name}</InputLabel>
+            <Select
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              label={parameter.name}
+            >
+              {(parameter.options || []).map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                </MenuItem>
+              ))}
             </Select>
             <Typography variant="caption" color="text.secondary">
               {parameter.description}
