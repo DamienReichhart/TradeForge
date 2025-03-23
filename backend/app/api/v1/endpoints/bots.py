@@ -554,4 +554,129 @@ def get_bot_performance(
         "total_profit_loss": total_profit_loss,
         "average_profit_loss": average_profit_loss,
         "time_series": time_series,
-    } 
+    }
+
+@router.post("/validate-expression", response_model=Dict[str, Any])
+def validate_expression(
+    *,
+    expression_data: Dict[str, str],
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    Validate a mathematical expression for buy/sell conditions or TP/SL calculations.
+    Returns validation result and error message if invalid.
+    """
+    expression = expression_data.get("expression", "")
+    expression_type = expression_data.get("type", "condition")  # condition or calculation
+    
+    if not expression:
+        return {
+            "valid": False,
+            "error": "Expression cannot be empty"
+        }
+    
+    try:
+        # Check for balanced parentheses and operators
+        parentheses_stack = []
+        operators = ["+", "-", "*", "/", ">", "<", ">=", "<=", "==", "!=", "and", "or", "not"]
+        tokens = []
+        i = 0
+        
+        while i < len(expression):
+            # Skip whitespace
+            if expression[i].isspace():
+                i += 1
+                continue
+                
+            # Check for numbers
+            if expression[i].isdigit() or expression[i] == '.':
+                num_start = i
+                while i < len(expression) and (expression[i].isdigit() or expression[i] == '.'):
+                    i += 1
+                tokens.append(expression[num_start:i])
+                continue
+                
+            # Check for parentheses
+            if expression[i] == '(':
+                parentheses_stack.append('(')
+                tokens.append('(')
+                i += 1
+                continue
+                
+            if expression[i] == ')':
+                if not parentheses_stack:
+                    return {
+                        "valid": False,
+                        "error": "Unbalanced parentheses: extra closing parenthesis"
+                    }
+                parentheses_stack.pop()
+                tokens.append(')')
+                i += 1
+                continue
+                
+            # Check for operators
+            for op in sorted(operators, key=len, reverse=True):
+                if expression[i:i+len(op)] == op:
+                    tokens.append(op)
+                    i += len(op)
+                    break
+            else:
+                # Check for variables/functions
+                if expression[i].isalpha() or expression[i] == '_':
+                    var_start = i
+                    while i < len(expression) and (expression[i].isalnum() or expression[i] == '_'):
+                        i += 1
+                    tokens.append(expression[var_start:i])
+                else:
+                    # Unknown character
+                    return {
+                        "valid": False,
+                        "error": f"Invalid character: {expression[i]}"
+                    }
+        
+        # Check for unbalanced parentheses
+        if parentheses_stack:
+            return {
+                "valid": False,
+                "error": "Unbalanced parentheses: missing closing parenthesis"
+            }
+            
+        # Check for empty expression
+        if not tokens:
+            return {
+                "valid": False,
+                "error": "Expression is empty"
+            }
+            
+        # Check for operator at start or end (except 'not' at start)
+        if tokens[0] in operators and tokens[0] != "not":
+            return {
+                "valid": False,
+                "error": f"Expression cannot start with operator: {tokens[0]}"
+            }
+            
+        if tokens[-1] in operators:
+            return {
+                "valid": False,
+                "error": f"Expression cannot end with operator: {tokens[-1]}"
+            }
+            
+        # Check for consecutive operators
+        for i in range(len(tokens) - 1):
+            if tokens[i] in operators and tokens[i+1] in operators and tokens[i+1] != "not":
+                return {
+                    "valid": False, 
+                    "error": f"Consecutive operators not allowed: {tokens[i]} {tokens[i+1]}"
+                }
+        
+        # Pass validation!
+        return {
+            "valid": True,
+            "error": None
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "error": f"Validation error: {str(e)}"
+        } 

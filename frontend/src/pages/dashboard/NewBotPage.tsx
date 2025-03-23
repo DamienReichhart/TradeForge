@@ -61,6 +61,13 @@ const NewBotPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
+  const [conditionsValidation, setConditionsValidation] = useState({
+    buy_condition: null as boolean | null,
+    sell_condition: null as boolean | null,
+    tp_condition: null as boolean | null,
+    sl_condition: null as boolean | null
+  });
+  
   // Constants
   const timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '1w'];
   const pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'SOL/USDT', 'DOGE/USDT'];
@@ -89,6 +96,24 @@ const NewBotPage: React.FC = () => {
     
     fetchData();
   }, []);
+  
+  // Initial validation of conditions
+  useEffect(() => {
+    // Only run validation if we're on the conditions step
+    if (activeStep === 2) {
+      // For standard bots, mark TP/SL as valid to bypass validation
+      if (formData.bot_type !== 'advanced') {
+        setConditionsValidation(prev => ({ 
+          ...prev, 
+          tp_condition: true, 
+          sl_condition: true 
+        }));
+      }
+
+      // Validate the current field when it changes
+      validateCondition(activeConditionField, formData[activeConditionField]);
+    }
+  }, [activeStep, activeConditionField, formData.bot_type, formData[activeConditionField]]);
   
   // Event handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }> | SelectChangeEvent) => {
@@ -232,8 +257,110 @@ const NewBotPage: React.FC = () => {
     }
   };
   
+  // Check if we can proceed to next step
+  const canProceedToNextStep = () => {
+    if (activeStep === 0) {
+      // Basic info validation
+      return formData.name.trim() !== '' && formData.pair !== '' && formData.timeframe !== '';
+    } else if (activeStep === 1) {
+      // Indicators validation
+      return formData.indicators.length > 0;
+    } else if (activeStep === 2) {
+      // Conditions validation - always check buy and sell conditions
+      const basicValidation = conditionsValidation.buy_condition === true && 
+                              conditionsValidation.sell_condition === true;
+                              
+      // For advanced bots, also check TP and SL conditions                        
+      if (formData.bot_type === 'advanced') {
+        return basicValidation && 
+               conditionsValidation.tp_condition === true &&
+               conditionsValidation.sl_condition === true;
+      }
+      
+      // For standard bots, only check buy and sell conditions
+      return basicValidation;
+    }
+    return true;
+  };
+  
+  // Function to validate a single condition
+  const validateCondition = async (conditionField: 'buy_condition' | 'sell_condition' | 'tp_condition' | 'sl_condition', value: string) => {
+    if (!value.trim()) {
+      setConditionsValidation(prev => ({ ...prev, [conditionField]: null }));
+      return;
+    }
+    
+    try {
+      const conditionType = conditionField.includes('condition') ? 'condition' : 'calculation';
+      const response = await botsApi.validateExpression(value, conditionType);
+      setConditionsValidation(prev => ({ ...prev, [conditionField]: response.data.valid }));
+      
+      if (!response.data.valid) {
+        setError(`${conditionField.replace('_', ' ').replace(/^\w/, c => c.toUpperCase())} error: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+      setConditionsValidation(prev => ({ ...prev, [conditionField]: false }));
+    }
+  };
+  
+  // Validate all conditions when user tries to navigate to Review step
+  const validateAllConditions = async () => {
+    setLoading(true);
+    
+    try {
+      // Always validate buy and sell conditions
+      const validators = [
+        validateCondition('buy_condition', formData.buy_condition),
+        validateCondition('sell_condition', formData.sell_condition)
+      ];
+      
+      // For advanced bots, also validate TP/SL conditions
+      if (formData.bot_type === 'advanced') {
+        validators.push(
+          validateCondition('tp_condition', formData.tp_condition),
+          validateCondition('sl_condition', formData.sl_condition)
+        );
+      } else {
+        // For standard bots, mark TP/SL as valid to bypass validation
+        setConditionsValidation(prev => ({ 
+          ...prev, 
+          tp_condition: true,
+          sl_condition: true
+        }));
+      }
+      
+      await Promise.all(validators);
+      
+      if (canProceedToNextStep()) {
+        setActiveStep(prev => prev + 1);
+      } else {
+        setError('Please fix all condition errors before proceeding');
+      }
+    } catch (error) {
+      console.error('Error validating conditions:', error);
+      setError('Failed to validate conditions. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   const handleNext = () => {
-    setActiveStep((prevStep) => prevStep + 1);
+    if (activeStep === 2) {
+      // Before proceeding to review, validate all conditions
+      validateAllConditions();
+    } else {
+      // For other steps, just check if we can proceed
+      if (canProceedToNextStep()) {
+        setActiveStep(prevStep => prevStep + 1);
+      } else {
+        if (activeStep === 0) {
+          setError('Please fill in all required basic information');
+        } else if (activeStep === 1) {
+          setError('Please add at least one indicator');
+        }
+      }
+    }
   };
   
   const handleBack = () => {
@@ -343,9 +470,17 @@ const NewBotPage: React.FC = () => {
               formData={formData}
               activeConditionField={activeConditionField}
               setActiveConditionField={setActiveConditionField}
-              handleChange={handleChange}
+              handleChange={(e) => {
+                handleChange(e);
+                // Update validation status when the field changes
+                validateCondition(activeConditionField, e.target.value);
+              }}
               selectedIndicators={formData.indicators}
               addToConditionField={addToConditionField}
+              validationStatus={conditionsValidation}
+              setValidationStatus={(field: 'buy_condition' | 'sell_condition' | 'tp_condition' | 'sl_condition', status: boolean | null) => 
+                setConditionsValidation(prev => ({ ...prev, [field]: status }))
+              }
             />
             <Box display="flex" justifyContent="flex-end" mt={4}>
               <Box display="flex" gap={2}>
@@ -357,12 +492,115 @@ const NewBotPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleNext}
-                  className="px-6 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium shadow-btn-primary"
+                  disabled={!canProceedToNextStep()}
+                  className={`px-6 py-2 rounded-lg ${canProceedToNextStep() 
+                    ? 'bg-primary-500 text-white hover:bg-primary-600' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'} transition-colors font-medium shadow-btn-primary`}
                 >
                   Continue to Review
+                  {!canProceedToNextStep() && formData.bot_type === 'advanced' && (
+                    <span className="ml-2">
+                      (Fix condition errors first)
+                    </span>
+                  )}
                 </button>
               </Box>
             </Box>
+            {activeStep === 2 && (
+              <Box mt={2} p={2} bgcolor="rgba(0,0,0,0.02)" borderRadius={1}>
+                <Box fontWeight="medium" mb={1}>Validation Status:</Box>
+                <Box display="flex" flexDirection="column" gap={1}>
+                  <Box display="flex" alignItems="center">
+                    <Box component="span" 
+                      sx={{ 
+                        width: 10, 
+                        height: 10, 
+                        borderRadius: '50%', 
+                        bgcolor: conditionsValidation.buy_condition === true 
+                          ? 'success.main' 
+                          : conditionsValidation.buy_condition === false 
+                            ? 'error.main' 
+                            : 'gray', 
+                        display: 'inline-block',
+                        mr: 1 
+                      }} 
+                    />
+                    Buy Condition: {conditionsValidation.buy_condition === true 
+                      ? 'Valid' 
+                      : conditionsValidation.buy_condition === false 
+                        ? 'Invalid' 
+                        : 'Not validated'}
+                  </Box>
+                  <Box display="flex" alignItems="center">
+                    <Box component="span" 
+                      sx={{ 
+                        width: 10, 
+                        height: 10, 
+                        borderRadius: '50%', 
+                        bgcolor: conditionsValidation.sell_condition === true 
+                          ? 'success.main' 
+                          : conditionsValidation.sell_condition === false 
+                            ? 'error.main' 
+                            : 'gray', 
+                        display: 'inline-block',
+                        mr: 1 
+                      }} 
+                    />
+                    Sell Condition: {conditionsValidation.sell_condition === true 
+                      ? 'Valid' 
+                      : conditionsValidation.sell_condition === false 
+                        ? 'Invalid' 
+                        : 'Not validated'}
+                  </Box>
+                  {formData.bot_type === 'advanced' && (
+                    <>
+                      <Box display="flex" alignItems="center">
+                        <Box component="span" 
+                          sx={{ 
+                            width: 10, 
+                            height: 10, 
+                            borderRadius: '50%', 
+                            bgcolor: conditionsValidation.tp_condition === true 
+                              ? 'success.main' 
+                              : conditionsValidation.tp_condition === false 
+                                ? 'error.main' 
+                                : 'gray', 
+                            display: 'inline-block',
+                            mr: 1 
+                          }} 
+                        />
+                        Take Profit Condition: {conditionsValidation.tp_condition === true 
+                          ? 'Valid' 
+                          : conditionsValidation.tp_condition === false 
+                            ? 'Invalid' 
+                            : 'Not validated'}
+                      </Box>
+                      <Box display="flex" alignItems="center">
+                        <Box component="span" 
+                          sx={{ 
+                            width: 10, 
+                            height: 10, 
+                            borderRadius: '50%', 
+                            bgcolor: conditionsValidation.sl_condition === true 
+                              ? 'success.main' 
+                              : conditionsValidation.sl_condition === false 
+                                ? 'error.main' 
+                                : 'gray', 
+                            display: 'inline-block',
+                            mr: 1 
+                          }} 
+                        />
+                        Stop Loss Condition: {conditionsValidation.sl_condition === true 
+                          ? 'Valid' 
+                          : conditionsValidation.sl_condition === false 
+                            ? 'Invalid' 
+                            : 'Not validated'}
+                      </Box>
+                    </>
+                  )}
+                </Box>
+              </Box>
+            )}
           </Box>
         );
       case 3:

@@ -102,6 +102,7 @@ export const botsApi = {
   start: (id: number) => api.post(`/bots/${id}/start`),
   stop: (id: number) => api.post(`/bots/${id}/stop`),
   getPerformance: (id: number) => api.get(`/bots/${id}/performance`),
+  validateExpression: (expression: string, type: string = 'condition') => api.post('/bots/validate-expression', { expression, type }),
 };
 
 // Indicators

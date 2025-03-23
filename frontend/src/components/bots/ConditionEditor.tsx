@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -22,6 +22,8 @@ import InfoIcon from '@mui/icons-material/Info';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import { botsApi } from '../../services/api';
+import { debounce } from 'lodash';
 
 // Styled components
 const StyledSection = styled(Box)(({ theme }) => ({
@@ -105,6 +107,13 @@ interface ConditionEditorProps {
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedIndicators: any[];
   addToConditionField: (value: string) => void;
+  validationStatus?: {
+    buy_condition: boolean | null;
+    sell_condition: boolean | null;
+    tp_condition: boolean | null;
+    sl_condition: boolean | null;
+  };
+  setValidationStatus?: (field: 'buy_condition' | 'sell_condition' | 'tp_condition' | 'sl_condition', status: boolean | null) => void;
 }
 
 const ConditionEditor: React.FC<ConditionEditorProps> = ({
@@ -113,11 +122,15 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
   setActiveConditionField,
   handleChange,
   selectedIndicators,
-  addToConditionField
+  addToConditionField,
+  validationStatus,
+  setValidationStatus
 }) => {
   const theme = useTheme();
   const [elementTab, setElementTab] = useState(0);
   const [isValid, setIsValid] = useState<boolean | null>(null);
+  const [validationMessage, setValidationMessage] = useState<string>('');
+  const [isValidating, setIsValidating] = useState<boolean>(false);
 
   // Available variables for condition editor
   const availableVariables: AvailableVariable[] = [
@@ -183,15 +196,60 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
     setElementTab(newValue);
   };
 
-  // Used for syntax validation
+  // Debounced server-side validation function
+  const validateWithServer = useCallback(
+    debounce(async (condition: string, type: string) => {
+      if (!condition.trim()) {
+        setIsValid(null);
+        setValidationMessage('');
+        // Also update parent component's validation status
+        if (setValidationStatus) {
+          setValidationStatus(activeConditionField, null);
+        }
+        return;
+      }
+
+      setIsValidating(true);
+      try {
+        const expType = activeConditionField.includes('condition') ? 'condition' : 'calculation';
+        const response = await botsApi.validateExpression(condition, expType);
+        setIsValid(response.data.valid);
+        setValidationMessage(response.data.error || '');
+        
+        // Update parent component's validation status
+        if (setValidationStatus) {
+          setValidationStatus(activeConditionField, response.data.valid);
+        }
+      } catch (error) {
+        console.error('Validation error:', error);
+        setIsValid(false);
+        setValidationMessage('Failed to validate expression');
+        
+        // Update parent component's validation status
+        if (setValidationStatus) {
+          setValidationStatus(activeConditionField, false);
+        }
+      } finally {
+        setIsValidating(false);
+      }
+    }, 500),
+    [activeConditionField, setValidationStatus]
+  );
+
+  // Enhanced validation that does basic check locally and full validation on server
   const validateCondition = (condition: string) => {
     if (!condition.trim()) {
       setIsValid(null);
+      setValidationMessage('');
+      // Update parent component's validation status
+      if (setValidationStatus) {
+        setValidationStatus(activeConditionField, null);
+      }
       return;
     }
 
     try {
-      // Simple validation - check if there are balanced parentheses
+      // Simple local validation for immediate feedback - check balanced parentheses
       const stack: string[] = [];
       const pairs: Record<string, string> = { '(': ')' };
       
@@ -202,15 +260,52 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
         } else if (Object.values(pairs).includes(char)) {
           if (stack.length === 0 || pairs[stack.pop()!] !== char) {
             setIsValid(false);
-            return;
+            setValidationMessage('Unbalanced parentheses');
+            // Update parent component's validation status
+            if (setValidationStatus) {
+              setValidationStatus(activeConditionField, false);
+            }
+            break;
           }
         }
       }
       
-      setIsValid(stack.length === 0);
+      if (stack.length === 0) {
+        // Basic validation passes, but we'll let the server decide final validity
+        validateWithServer(condition, activeConditionField);
+      } else {
+        setIsValid(false);
+        setValidationMessage('Unbalanced parentheses');
+        // Update parent component's validation status
+        if (setValidationStatus) {
+          setValidationStatus(activeConditionField, false);
+        }
+      }
     } catch (error) {
       setIsValid(false);
+      setValidationMessage('Invalid expression syntax');
+      // Update parent component's validation status
+      if (setValidationStatus) {
+        setValidationStatus(activeConditionField, false);
+      }
     }
+  };
+
+  // Add useEffect to validate on mount and when fields change
+  useEffect(() => {
+    // If we have external validation status, use that first
+    if (validationStatus && validationStatus[activeConditionField] !== null) {
+      setIsValid(validationStatus[activeConditionField]);
+    } else {
+      // Otherwise, validate locally
+      validateCondition(formData[activeConditionField]);
+    }
+  }, [formData[activeConditionField], activeConditionField, validationStatus]);
+
+  // Custom onChange handler to perform validation
+  const handleConditionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleChange(e);
+    validateCondition(e.target.value);
   };
 
   // Copy current condition to clipboard
@@ -408,7 +503,8 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
                   <Typography variant="subtitle1" fontWeight={600}>
                     {activeConditionField === 'buy_condition' ? 'Buy Condition' :
                      activeConditionField === 'sell_condition' ? 'Sell Condition' :
-                     activeConditionField === 'tp_condition' ? 'Take Profit Condition' : 'Stop Loss Condition'}
+                     activeConditionField === 'tp_condition' ? 'Take Profit Calculation' :
+                     'Stop Loss Calculation'}
                   </Typography>
                 </Box>
                 <Box>
@@ -437,19 +533,12 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
                   id={activeConditionField}
                   name={activeConditionField}
                   value={formData[activeConditionField]}
-                  onChange={(e) => {
-                    handleChange(e as React.ChangeEvent<HTMLInputElement>);
-                    validateCondition(e.target.value);
-                  }}
-                  placeholder={
-                    activeConditionField === 'buy_condition' 
-                      ? getExampleCondition('buy')
-                      : activeConditionField === 'sell_condition'
-                      ? getExampleCondition('sell')
-                      : activeConditionField === 'tp_condition'
-                      ? getExampleCondition('tp')
-                      : getExampleCondition('sl')
-                  }
+                  onChange={handleConditionChange}
+                  placeholder={getExampleCondition(
+                    activeConditionField === 'buy_condition' ? 'buy' :
+                    activeConditionField === 'sell_condition' ? 'sell' :
+                    activeConditionField === 'tp_condition' ? 'tp' : 'sl'
+                  )}
                   minRows={3}
                   maxRows={6}
                   variant="outlined"
@@ -460,8 +549,61 @@ const ConditionEditor: React.FC<ConditionEditorProps> = ({
                       backgroundColor: theme.palette.mode === 'dark' 
                         ? 'rgba(255, 255, 255, 0.05)' 
                         : 'rgba(0, 0, 0, 0.02)',
+                      '& fieldset': {
+                        borderColor: 
+                          isValid === true ? theme.palette.success.main : 
+                          isValid === false ? theme.palette.error.main : 
+                          theme.palette.divider,
+                      },
+                      '&:hover fieldset': {
+                        borderColor: 
+                          isValid === true ? theme.palette.success.main : 
+                          isValid === false ? theme.palette.error.main : 
+                          theme.palette.primary.main,
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: 
+                          isValid === true ? theme.palette.success.main : 
+                          isValid === false ? theme.palette.error.main : 
+                          theme.palette.primary.main,
+                      },
                     },
                   }}
+                  FormHelperTextProps={{
+                    sx: { 
+                      color: isValid ? theme.palette.success.main : 
+                             isValid === false ? theme.palette.error.main : 
+                             theme.palette.text.secondary
+                    }
+                  }}
+                  helperText={
+                    isValidating ? "Validating..." :
+                    isValid === null ? "Enter a condition" :
+                    isValid ? "Valid expression ✓" : 
+                    `Invalid expression: ${validationMessage}`
+                  }
+                  InputProps={{
+                    endAdornment: (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {isValid === true && (
+                          <CheckCircleIcon color="success" sx={{ ml: 1 }} />
+                        )}
+                        {isValid === false && (
+                          <ErrorIcon color="error" sx={{ ml: 1 }} />
+                        )}
+                        <Tooltip title="Copy to clipboard">
+                          <IconButton 
+                            size="small" 
+                            onClick={copyToClipboard}
+                            sx={{ ml: 1 }}
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    ),
+                  }}
+                  error={isValid === false}
                 />
               </EditorWrapper>
             </CardContent>
