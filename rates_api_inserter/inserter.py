@@ -10,22 +10,10 @@ import random  # For generating mock data
 from datetime import datetime, timedelta
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from dotenv import load_dotenv
+import queue
 
 # Load environment variables
 load_dotenv()
-
-# ---------------------------
-# CONFIGURATION & CONSTANTS
-# ---------------------------
-
-# API Configuration
-API_URL = os.getenv("API_URL")
-API_USERNAME = os.getenv("MARKET_RATES_API_USERNAME")
-API_PASSWORD = os.getenv("MARKET_RATES_API_PASSWORD")
-MOCK_API = os.getenv("MOCK_API", "true").lower() == "true"  # Default to mock mode
-
-# Start date for historical fill
-START_FILL_DATE = datetime(2018, 1, 1)
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -41,6 +29,24 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("inserter")
+
+
+# Wait the time for the api to be ready
+logger.info("Waiting for the API to be ready...")
+time.sleep(10)  # Reduced from 60 seconds to 10 seconds for faster startup
+
+# ---------------------------
+# CONFIGURATION & CONSTANTS
+# ---------------------------
+
+# API Configuration
+API_URL = os.getenv("API_URL")
+API_USERNAME = os.getenv("MARKET_RATES_API_USERNAME")
+API_PASSWORD = os.getenv("MARKET_RATES_API_PASSWORD")
+MOCK_API = os.getenv("MOCK_API", "true").lower() == "true"  # Default to mock mode
+
+# Start date for historical fill
+START_FILL_DATE = datetime(2018, 1, 1)
 
 # Connect to MT5 server
 try:
@@ -218,7 +224,7 @@ def get_candles(symbol, timeframe, from_date, to_date):
 # API OPERATIONS
 # ---------------------------
 def insert_rates(symbol, timeframe_label, rates):
-    """Insert rates into the API."""
+    """Insert rates into the API one by one."""
     if not rates:
         logger.warning(f"No rates to insert for {symbol} {timeframe_label}")
         return
@@ -253,60 +259,322 @@ def insert_rates(symbol, timeframe_label, rates):
                 "real_volume": rate["real_volume"]
             })
         
-        logger.debug(f"Inserting {len(rates_data)} {symbol} {timeframe_label} rates into API")
+        # Insert candles one by one
+        total_inserted = 0
+        total_candles = len(rates_data)
         
-        # Updated endpoint to match the actual API structure and format
-        response = requests.post(
-            f"{API_URL}/data",
-            headers={"Authorization": f"Bearer {token}"},
-            json=rates_data,
-            timeout=30  # Longer timeout for potentially large data
-        )
+        logger.info(f"Inserting {total_candles} candles for {symbol} {timeframe_label} one by one")
         
-        response.raise_for_status()
-        result = response.json()
+        # Add progress tracking
+        progress_interval = max(1, total_candles // 10)  # Log progress every 10% or at least once
         
-        logger.info(f"Inserted {len(rates_data)} {symbol} {timeframe_label} rates. Result: {result}")
-        return result
+        for i, candle in enumerate(rates_data):
+            # Progress logging
+            if i % progress_interval == 0 or i == total_candles - 1:
+                progress_pct = ((i + 1) / total_candles) * 100
+                logger.info(f"Progress: {i + 1}/{total_candles} ({progress_pct:.1f}%) candles for {symbol} {timeframe_label}")
+            
+            # Retry logic for each candle
+            for attempt in range(MAX_RETRIES):
+                try:
+                    # Insert a single candle as a list with one element
+                    response = requests.post(
+                        f"{API_URL}/data",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json=[candle],  # Wrapped in a list as the API expects an array
+                        timeout=10  # Shorter timeout for single candle
+                    )
+                    
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    # Increment success counter
+                    total_inserted += result.get('points_written', 0)
+                    
+                    # Small delay between individual inserts
+                    time.sleep(0.05)
+                    break  # Success, exit retry loop
+                    
+                except requests.exceptions.RequestException as e:
+                    if attempt < MAX_RETRIES - 1:
+                        wait_time = RETRY_WAIT_MULTIPLIER * (2 ** attempt)  # Exponential backoff
+                        if wait_time > RETRY_MAX_WAIT:
+                            wait_time = RETRY_MAX_WAIT
+                        logger.warning(f"Error inserting candle {i+1}/{total_candles} (attempt {attempt+1}/{MAX_RETRIES}): {e}. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Failed to insert candle {i+1}/{total_candles} after {MAX_RETRIES} attempts: {e}")
+                        # Continue with next candle even if this one failed
+        
+        success_rate = (total_inserted / total_candles) * 100 if total_candles > 0 else 0
+        logger.info(f"Completed inserting {total_inserted} out of {total_candles} candles for {symbol} {timeframe_label} ({success_rate:.1f}%)")
+        return {"status": "success", "inserted": total_inserted}
+    
     except requests.exceptions.RequestException as e:
         logger.error(f"Error inserting rates for {symbol} {timeframe_label}: {e}")
         # In case of error in non-mock mode, we'll still return a result to prevent crashes
+        return {"status": "error", "message": str(e)}
+    except Exception as e:
+        logger.error(f"Unexpected error inserting rates for {symbol} {timeframe_label}: {e}")
         return {"status": "error", "message": str(e)}
 
 # ---------------------------
 # DATA COLLECTION OPERATIONS
 # ---------------------------
-def historical_fill():
-    """Fill the API with historical data."""
-    for symbol in symbols:
-        for timeframe_label, tf_constant in TIMEFRAMES.items():
-            logger.info(f"Starting historical fill for {symbol} {timeframe_label}")
+def historical_fill_worker(symbol, timeframe_label, tf_constant, results_dict, thread_id):
+    """Worker function for historical fill. Each worker handles one symbol/timeframe combination."""
+    try:
+        logger.info(f"Thread {thread_id}: Starting historical fill for {symbol} {timeframe_label}")
+        
+        # Calculate start date based on timeframe to get ~1000 candles
+        to_date = datetime.now()
+        
+        # Calculate how far back to go for 1000 candles based on timeframe
+        if tf_constant == mt5.TIMEFRAME_M1:
+            from_date = to_date - timedelta(minutes=1000)  # 1000 minutes
+        elif tf_constant == mt5.TIMEFRAME_M5:
+            from_date = to_date - timedelta(minutes=5 * 1000)  # 5000 minutes
+        elif tf_constant == mt5.TIMEFRAME_M15:
+            from_date = to_date - timedelta(minutes=15 * 1000)  # 15000 minutes
+        elif tf_constant == mt5.TIMEFRAME_M30:
+            from_date = to_date - timedelta(minutes=30 * 1000)  # 30000 minutes
+        elif tf_constant == mt5.TIMEFRAME_H1:
+            from_date = to_date - timedelta(hours=1000)  # 1000 hours
+        elif tf_constant == mt5.TIMEFRAME_H4:
+            from_date = to_date - timedelta(hours=4 * 1000)  # 4000 hours
+        elif tf_constant == mt5.TIMEFRAME_D1:
+            from_date = to_date - timedelta(days=1000)  # 1000 days
+        else:
+            from_date = to_date - timedelta(days=30)  # Default fallback
+        
+        logger.info(f"Thread {thread_id}: Fetching last 1000 candles for {symbol} {timeframe_label} from {from_date} to {to_date}")
+        
+        chunks_processed = 0
+        chunks_successful = 0
+        
+        # For large timeframes, we can fetch all 1000 candles at once
+        # For smaller timeframes, break into chunks to avoid overwhelming the system
+        max_chunk_days = 7  # Maximum days to fetch in a single chunk
+        
+        # Calculate the actual time difference
+        time_diff = to_date - from_date
+        
+        # If time difference is less than max_chunk_days, fetch all at once
+        if time_diff.days <= max_chunk_days:
+            logger.info(f"Thread {thread_id}: Processing all 1000 candles for {symbol} {timeframe_label}")
             
-            from_date = START_FILL_DATE
-            to_date = datetime.now()
+            retries = 0
+            max_chunk_retries = 3
+            success = False
             
-            # Break up into smaller chunks (e.g., monthly)
-            while from_date < to_date:
-                chunk_to_date = min(from_date + timedelta(days=30), to_date)
-                
-                logger.info(f"Getting historical data for {symbol} {timeframe_label} from {from_date} to {chunk_to_date}")
-                
+            while not success and retries < max_chunk_retries:
                 try:
-                    candles = get_candles(symbol, tf_constant, from_date, chunk_to_date)
+                    candles = get_candles(symbol, tf_constant, from_date, to_date)
                     
                     if candles:
-                        insert_rates(symbol, timeframe_label, candles)
-                        logger.info(f"Inserted {len(candles)} historical candles for {symbol} {timeframe_label}")
+                        # Make sure we only take the last 1000 candles if we got more
+                        if len(candles) > 1000:
+                            candles = candles[-1000:]
+                            
+                        result = insert_rates(symbol, timeframe_label, candles)
+                        if result.get("status") == "success":
+                            inserted_count = result.get("inserted", 0)
+                            logger.info(f"Thread {thread_id}: Complete: Inserted {inserted_count} of {len(candles)} candles for {symbol} {timeframe_label}")
+                            chunks_successful += 1
+                            success = True
+                        else:
+                            logger.warning(f"Thread {thread_id}: Insertion for {symbol} {timeframe_label} returned: {result}")
+                            retries += 1
                     else:
-                        logger.warning(f"No historical data available for {symbol} {timeframe_label} from {from_date} to {chunk_to_date}")
+                        logger.warning(f"Thread {thread_id}: No data found for {symbol} {timeframe_label} from {from_date} to {to_date}")
+                        success = True  # No data is not an error condition
                     
-                    from_date = chunk_to_date
-                    time.sleep(0.5)  # Small delay to avoid overwhelming the API
                 except Exception as e:
-                    logger.error(f"Error processing historical data for {symbol} {timeframe_label}: {e}")
-                    # Continue with next chunk instead of failing completely
-                    from_date = chunk_to_date
-                    time.sleep(1)  # Slightly longer delay after error
+                    retries += 1
+                    logger.error(f"Thread {thread_id}: Error processing candles for {symbol} {timeframe_label} (attempt {retries}/{max_chunk_retries}): {e}")
+                    if retries < max_chunk_retries:
+                        wait_time = 2 ** retries  # Exponential backoff
+                        logger.info(f"Thread {thread_id}: Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Thread {thread_id}: Failed to process after {max_chunk_retries} attempts, skipping to next symbol/timeframe")
+            
+            # Count as processed
+            chunks_processed += 1
+            
+        # Otherwise, break into chunks
+        else:
+            chunk_from_date = from_date
+            
+            while chunk_from_date < to_date:
+                chunk_to_date = min(chunk_from_date + timedelta(days=max_chunk_days), to_date)
+                
+                logger.info(f"Thread {thread_id}: Processing chunk {chunks_processed+1} for {symbol} {timeframe_label}: {chunk_from_date} to {chunk_to_date}")
+                
+                retries = 0
+                max_chunk_retries = 3
+                success = False
+                
+                while not success and retries < max_chunk_retries:
+                    try:
+                        candles = get_candles(symbol, tf_constant, chunk_from_date, chunk_to_date)
+                        
+                        if candles:
+                            result = insert_rates(symbol, timeframe_label, candles)
+                            if result.get("status") == "success":
+                                inserted_count = result.get("inserted", 0)
+                                logger.info(f"Thread {thread_id}: Chunk {chunks_processed+1} complete: Inserted {inserted_count} of {len(candles)} candles for {symbol} {timeframe_label}")
+                                chunks_successful += 1
+                                success = True
+                            else:
+                                logger.warning(f"Thread {thread_id}: Chunk {chunks_processed+1} for {symbol} {timeframe_label} returned: {result}")
+                                retries += 1
+                        else:
+                            logger.warning(f"Thread {thread_id}: No data found for {symbol} {timeframe_label} from {chunk_from_date} to {chunk_to_date}")
+                            success = True  # No data is not an error condition
+                        
+                    except Exception as e:
+                        retries += 1
+                        logger.error(f"Thread {thread_id}: Error processing chunk {chunks_processed+1} for {symbol} {timeframe_label} (attempt {retries}/{max_chunk_retries}): {e}")
+                        if retries < max_chunk_retries:
+                            wait_time = 2 ** retries  # Exponential backoff
+                            logger.info(f"Thread {thread_id}: Retrying in {wait_time} seconds...")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"Thread {thread_id}: Failed to process chunk after {max_chunk_retries} attempts, skipping to next chunk")
+                
+                # Move to next chunk regardless of success
+                chunks_processed += 1
+                chunk_from_date = chunk_to_date
+                
+                # Small delay between chunks to avoid overwhelming the system
+                time.sleep(0.2)
+        
+        if chunks_processed > 0:
+            success_rate = (chunks_successful / chunks_processed) * 100
+            logger.info(f"Thread {thread_id}: Completed {symbol} {timeframe_label}: {chunks_successful}/{chunks_processed} chunks successful ({success_rate:.1f}%)")
+            
+            # Store result in the shared dictionary
+            results_dict[thread_id] = {
+                "symbol": symbol,
+                "timeframe": timeframe_label,
+                "processed": chunks_processed,
+                "successful": chunks_successful,
+                "success_rate": success_rate,
+                "status": "success" if chunks_successful > 0 else "failure"
+            }
+        else:
+            # Store result in the shared dictionary
+            results_dict[thread_id] = {
+                "symbol": symbol,
+                "timeframe": timeframe_label,
+                "processed": 0,
+                "successful": 0,
+                "success_rate": 0,
+                "status": "no_data"
+            }
+            
+    except Exception as e:
+        logger.error(f"Thread {thread_id}: Unexpected error in historical fill worker for {symbol} {timeframe_label}: {e}")
+        # Store error in the shared dictionary
+        results_dict[thread_id] = {
+            "symbol": symbol,
+            "timeframe": timeframe_label,
+            "error": str(e),
+            "status": "error"
+        }
+
+def historical_fill():
+    """Fill the API with historical data (last 1000 candles per symbol/timeframe) using a limited thread pool."""
+    # Process symbols in a fixed order to ensure all symbols are processed
+    total_symbols = len(symbols)
+    total_timeframes = len(TIMEFRAMES)
+    total_combinations = total_symbols * total_timeframes
+    
+    logger.info(f"Starting threaded historical fill for {total_combinations} symbol/timeframe combinations with max 5 concurrent threads")
+    
+    # Create a thread-safe dictionary to store results
+    from threading import Lock
+    results_dict = {}
+    results_lock = Lock()
+    
+    # Create a thread-safe queue for work items
+    from queue import Queue
+    work_queue = Queue()
+    
+    # Add all symbol/timeframe combinations to the queue
+    for symbol in symbols:
+        for timeframe_label, tf_constant in TIMEFRAMES.items():
+            work_queue.put((symbol, timeframe_label, tf_constant))
+    
+    # Track active threads
+    active_threads = []
+    completed_count = 0
+    max_threads = 5  # Limit to 5 concurrent threads
+    
+    # Function for worker threads to process items from the queue
+    def worker_thread():
+        nonlocal completed_count
+        thread_id = threading.get_ident()
+        
+        while not work_queue.empty():
+            try:
+                # Get the next work item
+                symbol, timeframe_label, tf_constant = work_queue.get(block=False)
+                
+                logger.info(f"Worker thread {thread_id} picking up task for {symbol} {timeframe_label}")
+                
+                # Process the item
+                historical_fill_worker(symbol, timeframe_label, tf_constant, results_dict, thread_id)
+                
+                # Mark task as done
+                work_queue.task_done()
+                
+                # Update progress
+                with results_lock:
+                    completed_count += 1
+                    progress_pct = (completed_count / total_combinations) * 100
+                    logger.info(f"Progress: {completed_count}/{total_combinations} ({progress_pct:.1f}%) combinations completed")
+                
+            except queue.Empty:
+                # No more tasks
+                break
+            except Exception as e:
+                logger.error(f"Error in worker thread {thread_id}: {e}")
+                # Mark task as done even if it failed
+                try:
+                    work_queue.task_done()
+                except:
+                    pass
+    
+    # Start worker threads (maximum of 5)
+    logger.info(f"Starting {max_threads} worker threads for historical fill")
+    for i in range(max_threads):
+        thread = threading.Thread(
+            target=worker_thread,
+            daemon=True,
+            name=f"HistoricalFill-Worker-{i+1}"
+        )
+        thread.start()
+        active_threads.append(thread)
+        # Small delay to avoid thread startup contention
+        time.sleep(0.1)
+    
+    # Wait for all worker threads to complete
+    for thread in active_threads:
+        thread.join()
+    
+    # Process results
+    successful_count = 0
+    for thread_id, result in results_dict.items():
+        if result.get("status") == "success":
+            successful_count += 1
+    
+    overall_success_rate = (successful_count / total_combinations) * 100
+    logger.info(f"Threaded historical fill complete: {successful_count}/{total_combinations} combinations successful ({overall_success_rate:.1f}%)")
+    
+    # Return false if not all symbols were processed successfully
+    return successful_count == total_combinations
 
 def live_update_worker(symbol, timeframe_label, timeframe):
     """Worker function for live updates."""
@@ -375,29 +643,64 @@ if __name__ == "__main__":
     try:
         if MOCK_API:
             logger.info("Starting in MOCK API mode - no actual API calls will be made")
+        else:
+            logger.info("Starting in PRODUCTION mode - data will be inserted into the real API")
             
-        logger.info("Starting historical fill...")
-        historical_fill()
-        logger.info("Historical fill complete. Starting live update threads...")
+        # Perform historical fill with proper status tracking
+        logger.info("Starting threaded historical fill process...")
+        historical_fill_success = historical_fill()
+        
+        if historical_fill_success:
+            logger.info("Threaded historical fill completed successfully. All data has been inserted.")
+        else:
+            logger.warning("Threaded historical fill completed with some failures. Some data may be missing.")
+            # Option to retry the historical fill if needed
+            # Uncomment the following lines to retry the historical fill
+            # logger.info("Retrying historical fill to ensure all data is inserted...")
+            # historical_fill()
+        
+        # Historical fill threads are automatically terminated since they are joined in the historical_fill function
+        logger.info("All historical fill threads have been terminated.")
+        
+        logger.info("Starting live update threads for real-time data...")
 
+        # Start live update threads for each symbol and timeframe
         threads = []
         for symbol in symbols:
             for timeframe_label, tf_constant in TIMEFRAMES.items():
                 thread = threading.Thread(
                     target=live_update_worker,
                     args=(symbol, timeframe_label, tf_constant),
-                    daemon=True
+                    daemon=True,
+                    name=f"LiveUpdater-{symbol}-{timeframe_label}"
                 )
                 thread.start()
-                threads.append(thread)
+                threads.append((thread, symbol, timeframe_label))
                 # Small delay to avoid overwhelming the API
                 time.sleep(0.2)
                 
-        logger.info(f"Started {len(threads)} update threads")
+        logger.info(f"Started {len(threads)} update threads for real-time data")
 
-        # Keep the main thread alive
+        # Monitor threads and restart any that die
         while True:
-            active_count = sum(1 for t in threads if t.is_alive())
+            active_count = 0
+            for i, (thread, symbol, timeframe_label) in enumerate(threads):
+                if thread.is_alive():
+                    active_count += 1
+                else:
+                    logger.warning(f"Thread for {symbol} {timeframe_label} has died. Restarting...")
+                    # Create and start a new thread
+                    new_thread = threading.Thread(
+                        target=live_update_worker,
+                        args=(symbol, timeframe_label, TIMEFRAMES[timeframe_label]),
+                        daemon=True,
+                        name=f"LiveUpdater-{symbol}-{timeframe_label}"
+                    )
+                    new_thread.start()
+                    # Update the thread in our list
+                    threads[i] = (new_thread, symbol, timeframe_label)
+                    active_count += 1
+                    
             logger.info(f"Active threads: {active_count}/{len(threads)}")
             time.sleep(60)
 
@@ -405,6 +708,8 @@ if __name__ == "__main__":
         logger.info("Script interrupted by user.")
     except Exception as e:
         logger.critical(f"Unexpected error: {e}")
+        import traceback
+        logger.critical(traceback.format_exc())
     finally:
         logger.info("Shutting down MetaTrader5 connection")
         mt5.disconnect()

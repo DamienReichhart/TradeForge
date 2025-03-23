@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     INFLUXDB_TOKEN: str = os.getenv("INFLUXDB_TOKEN")
     
     # Rate Limiting
-    RATE_LIMIT_PER_MINUTE: int = 1000
+    RATE_LIMIT_PER_MINUTE: int = 100000
     
     # CORS Settings
     BACKEND_CORS_ORIGINS: list = ["*"]
