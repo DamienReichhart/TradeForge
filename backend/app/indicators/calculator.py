@@ -6,6 +6,7 @@ import re
 import ast
 import operator as op
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -198,22 +199,68 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
     
     # Make a copy to avoid modifying the original
     df = df.copy()
+    calculated_indicators = []
     
+    # Parse any indicator configurations with the frontend format
+    parsed_config = {}
     for indicator_name, config in indicators_config.items():
+        # Check if the indicator name follows the format "IndicatorName(Abbreviation)Period"
+        import re
+        indicator_match = re.match(r'([A-Za-z]+)\(([A-Za-z]+)\)(\d+)', indicator_name)
+        
+        if indicator_match:
+            # Extract the parts
+            full_name = indicator_match.group(1)       # e.g., SimpleMovingAverage
+            abbrev = indicator_match.group(2)          # e.g., SMA
+            period = int(indicator_match.group(3))     # e.g., 14
+            
+            # Map full name to our supported indicator types
+            if full_name == "SimpleMovingAverage":
+                parsed_name = "SMA"
+            elif full_name == "ExponentialMovingAverage":
+                parsed_name = "EMA"
+            elif full_name == "RelativeStrengthIndex":
+                parsed_name = "RSI"
+            elif full_name == "MovingAverageConvergenceDivergence":
+                parsed_name = "MACD"
+            elif full_name == "BollingerBands":
+                parsed_name = "Bollinger Bands"
+            elif full_name == "Stochastic":
+                parsed_name = "Stochastic"
+            else:
+                # Default to the abbreviation if we don't recognize the full name
+                parsed_name = abbrev
+            
+            # Add to the parsed config with a new structure
+            if parsed_name not in parsed_config:
+                parsed_config[parsed_name] = config.copy()
+                # Set the period parameter
+                if "parameters" not in parsed_config[parsed_name]:
+                    parsed_config[parsed_name]["parameters"] = {}
+                parsed_config[parsed_name]["parameters"]["period"] = period
+        else:
+            # Original format
+            parsed_config[indicator_name] = config
+    
+    # Calculate all indicators with the parsed configuration
+    for indicator_name, config in parsed_config.items():
         params = {**config.get("base_parameters", {}), **config.get("parameters", {})}
         
         try:
             if indicator_name == "SMA":
                 period = params.get("period", 14)
                 df[f'SMA_{period}'] = ta.trend.sma_indicator(df['close'], window=period)
+                calculated_indicators.append(f'SMA_{period}')
             
             elif indicator_name == "EMA":
                 period = params.get("period", 14)
                 df[f'EMA_{period}'] = ta.trend.ema_indicator(df['close'], window=period)
+                calculated_indicators.append(f'EMA_{period}')
             
             elif indicator_name == "RSI":
                 period = params.get("period", 14)
                 df[f'RSI_{period}'] = ta.momentum.rsi(df['close'], window=period)
+                calculated_indicators.append(f'RSI_{period}')
             
             elif indicator_name == "MACD":
                 fast = params.get("fast_period", 12)
@@ -227,9 +274,18 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
                     window_sign=signal
                 )
                 
-                df[f'MACD_line'] = macd.macd()
-                df[f'MACD_signal'] = macd.macd_signal()
-                df[f'MACD_histogram'] = macd.macd_diff()
+                # For MACD, use either the period or fast_period for the identifier
+                period = params.get("period", fast)
+                
+                df[f'MACD_{period}'] = macd.macd()
+                df[f'MACD_signal_{period}'] = macd.macd_signal()
+                df[f'MACD_histogram_{period}'] = macd.macd_diff()
+                
+                calculated_indicators.extend([
+                    f'MACD_{period}', 
+                    f'MACD_signal_{period}', 
+                    f'MACD_histogram_{period}'
+                ])
             
             elif indicator_name == "Bollinger Bands":
                 period = params.get("period", 20)
@@ -241,10 +297,17 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
                     window_dev=std_dev
                 )
                 
-                df[f'BB_upper'] = bb.bollinger_hband()
-                df[f'BB_middle'] = bb.bollinger_mavg()
-                df[f'BB_lower'] = bb.bollinger_lband()
-                df[f'BB_width'] = bb.bollinger_wband()
+                df[f'BB_upper_{period}'] = bb.bollinger_hband()
+                df[f'BB_middle_{period}'] = bb.bollinger_mavg()
+                df[f'BB_lower_{period}'] = bb.bollinger_lband()
+                df[f'BB_width_{period}'] = bb.bollinger_wband()
+                
+                calculated_indicators.extend([
+                    f'BB_upper_{period}', 
+                    f'BB_middle_{period}', 
+                    f'BB_lower_{period}', 
+                    f'BB_width_{period}'
+                ])
             
             elif indicator_name == "Stochastic":
                 k_period = params.get("k_period", 14)
@@ -258,8 +321,13 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
                     smooth_window=d_period
                 )
                 
-                df[f'Stoch_%K'] = stoch.stoch()
-                df[f'Stoch_%D'] = stoch.stoch_signal()
+                df[f'Stoch_%K_{k_period}'] = stoch.stoch()
+                df[f'Stoch_%D_{k_period}'] = stoch.stoch_signal()
+                
+                calculated_indicators.extend([
+                    f'Stoch_%K_{k_period}', 
+                    f'Stoch_%D_{k_period}'
+                ])
             
             elif indicator_name == "ATR":
                 period = params.get("period", 14)
@@ -269,12 +337,14 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
                     close=df['close'],
                     window=period
                 )
+                calculated_indicators.append(f'ATR_{period}')
             
             elif indicator_name == "OBV":
                 df['OBV'] = ta.volume.on_balance_volume(
                     close=df['close'],
                     volume=df.get('volume', df.get('tick_volume', df.get('real_volume')))
                 )
+                calculated_indicators.append('OBV')
             
             elif indicator_name == "ADX":
                 period = params.get("period", 14)
@@ -288,10 +358,20 @@ def calculate_indicators(df: pd.DataFrame, indicators_config: Dict[str, Dict[str
                 df[f'ADX_{period}'] = adx.adx()
                 df[f'DI+_{period}'] = adx.adx_pos()
                 df[f'DI-_{period}'] = adx.adx_neg()
+                
+                calculated_indicators.extend([
+                    f'ADX_{period}', 
+                    f'DI+_{period}', 
+                    f'DI-_{period}'
+                ])
             
             # Add more indicators as needed
             
         except Exception as e:
-            print(f"Error calculating {indicator_name}: {e}")
+            logger.error(f"Error calculating {indicator_name}: {e}")
+            traceback.print_exc()
+    
+    logger.info(f"Calculated indicators: {calculated_indicators}")
+    logger.debug(f"DataFrame columns after calculation: {list(df.columns)}")
     
     return df 

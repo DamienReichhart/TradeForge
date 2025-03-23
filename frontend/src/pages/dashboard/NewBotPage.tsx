@@ -70,7 +70,7 @@ const NewBotPage: React.FC = () => {
   
   // Constants
   const timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '1w'];
-  const pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'SOL/USDT', 'DOGE/USDT'];
+  const pairs = ['EURUSD', 'BTCUSD', 'ETHUSD', 'BNBUSD', 'XRPUSD', 'ADAUSD', 'SOLUSD', 'DOGEUSD'];
   const steps = ['Basic Information', 'Indicators', 'Trading Conditions', 'Review'];
   
   // Fetch data on component mount

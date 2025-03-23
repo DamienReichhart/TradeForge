@@ -1,3 +1,102 @@
+# TradeForge Trading Bot System
+
+TradeForge is a comprehensive trading bot platform that enables users to create, configure, and monitor automated trading strategies.
+
+## Features
+
+- **One thread per user per bot**: Each bot runs in its own thread, ensuring isolation and stability
+- **Control over bot configuration, shutdown, and reboot**: Full control over the bot lifecycle
+- **Direct connection to market data**: Uses InfluxDB for market data storage and retrieval
+- **Support for multiple bot types**:
+  - **Standard Bots**: Opens a trade when conditions are met, closes when conditions change
+  - **Advanced Bots**: Opens a trade with TP/SL levels calculated from conditions
+- **Telegram integration**: Sends trade signals to users via Telegram
+
+## Bot Types
+
+### Standard Bots
+- Open a buy trade when the buy condition is true, only one buy order at a time
+- Open a sell trade when the sell condition is true, only one sell order at a time
+- Close trades when the respective condition becomes false
+
+Message format:
+```
+BUY {pair_name} NOW
+```
+or
+```
+SELL {pair_name} NOW
+```
+
+For closing:
+```
+CLOSE {pair_name} NOW
+```
+
+### Advanced Bots
+- Open a buy order when the buy condition is true, only one open trade at a time
+- Open a sell order when the sell condition is true, only one open trade at a time
+- Calculate TP and SL based on parameters
+- Trades are closed when TP/SL is hit (no need to close if the condition changes)
+
+Message format:
+```
+BUY {pair_name} NOW
+ENTRY: {trade_entry}
+TP: {tp}
+SL: {sl}
+```
+or
+```
+SELL {pair_name} NOW
+ENTRY: {trade_entry}
+TP: {tp}
+SL: {sl}
+```
+
+## API Endpoints
+
+### Bot Management
+- `GET /api/v1/bots`: Get all user's bots
+- `POST /api/v1/bots`: Create a new bot
+- `GET /api/v1/bots/{bot_id}`: Get a specific bot
+- `POST /api/v1/bots/{bot_id}/update`: Update a bot
+- `POST /api/v1/bots/{bot_id}/delete`: Delete a bot
+- `POST /api/v1/bots/{bot_id}/start`: Start a bot
+- `POST /api/v1/bots/{bot_id}/stop`: Stop a bot
+- `POST /api/v1/bots/{bot_id}/restart`: Restart a bot
+- `POST /api/v1/bots/{bot_id}/update_config`: Update a bot's configuration
+- `GET /api/v1/bots/status`: Get the status of all bots
+- `GET /api/v1/bots/performance`: Get global performance statistics
+- `GET /api/v1/bots/{bot_id}/performance`: Get bot performance statistics
+
+## Architecture
+
+- **Bot Controller**: Manages all bot instances, one thread per user per bot
+- **Trading Bot**: Implements the trading logic for a specific bot
+- **Telegram Integration**: Sends trade signals to users via Telegram
+- **Market Data**: Direct connection to InfluxDB for market data
+
+## Safety Features
+
+- Bots are stopped cleanly on system shutdown
+- All open trades are closed when a bot is stopped or restarted
+- Proper error handling and logging
+
+## Usage
+
+1. Create a bot with your desired configuration
+2. Start the bot
+3. Monitor the bot's performance and trades
+4. Update the bot's configuration or stop it as needed
+
+## Configuration
+
+The bot system uses the following configuration options:
+- InfluxDB connection for market data
+- Telegram bot token for notifications
+- PostgreSQL database for bot configuration and trade storage
+
 # TradeForge
 
 <div align="center">

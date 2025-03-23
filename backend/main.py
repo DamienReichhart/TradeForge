@@ -98,7 +98,51 @@ async def startup_event():
     db_init()
     logger.info("Indicator initialization complete!")
     
+    # Initialize the bot controller
+    from app.bots.trading_bot import bot_controller
+    logger.info("Bot controller initialized")
+    
+    # Restart any bots that were running before shutdown
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        from app.models import Bot, User
+        running_bots = db.query(Bot).filter(Bot.is_running == True).all()
+        logger.info(f"Found {len(running_bots)} bots that were running before shutdown. Restarting...")
+        
+        for bot in running_bots:
+            try:
+                # Start the bot
+                bot_controller.start_bot(bot.user_id, bot.id, db)
+                logger.info(f"Restarted bot {bot.id} for user {bot.user_id}")
+            except Exception as e:
+                logger.error(f"Failed to restart bot {bot.id}: {e}")
+                # Mark the bot as not running in the database
+                bot.is_running = False
+                db.add(bot)
+        
+        db.commit()
+    except Exception as e:
+        logger.error(f"Error restarting bots: {e}")
+    finally:
+        db.close()
+    
     # Prometheus metrics are already initialized before middleware
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown"""
+    logger.info("Application shutdown")
+    
+    # Stop all running bots
+    from app.bots.trading_bot import bot_controller
+    bot_controller.cleanup()
+    logger.info("All bots stopped")
+    
+    # Close InfluxDB connections
+    from app.utils.market_data import close_client
+    close_client()
+    logger.info("InfluxDB connections closed")
 
 @app.get("/")
 async def root():

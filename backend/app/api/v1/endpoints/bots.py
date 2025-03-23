@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app import models, schemas
-from app.api.deps import get_db, get_current_user, get_current_active_superuser
-from app.bots.trading_bot import TradingBot
+from app.api.deps import get_db, get_current_user, get_current_active_superuser, get_current_active_user
+from app.bots.trading_bot import TradingBot, bot_controller
 from app.utils import telegram
 
 router = APIRouter()
@@ -361,30 +361,16 @@ def start_bot(
             detail="Buy and sell conditions must be set",
         )
     
-    # Initialize the trading bot
-    trading_bot = TradingBot(
-        bot_id=bot.id,
-        pair=bot.pair,
-        timeframe=bot.timeframe,
-        buy_condition=bot.buy_condition,
-        sell_condition=bot.sell_condition,
-        db_session=db,
-        telegram_channel=bot.telegram_channel,
-        bot_type=bot.bot_type,
-        tp_condition=bot.tp_condition,
-        sl_condition=bot.sl_condition
-    )
+    # Start the bot using the controller
+    success = bot_controller.start_bot(current_user.id, bot_id, db)
     
-    # Start the bot in a background thread
-    background_tasks.add_task(trading_bot.start)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start bot",
+        )
     
-    # Store the bot instance
-    active_bots[bot.id] = trading_bot
-    
-    # Update the bot status
-    bot.is_running = True
-    db.add(bot)
-    db.commit()
+    # Refresh bot from database to get updated status
     db.refresh(bot)
     
     return bot
@@ -416,15 +402,87 @@ def stop_bot(
             detail="Bot is not running",
         )
     
-    # Stop the bot if it's in the active bots dictionary
-    if bot_id in active_bots:
-        active_bots[bot_id].stop()
-        del active_bots[bot_id]
+    # Stop the bot using the controller
+    success = bot_controller.stop_bot(current_user.id, bot_id, db)
     
-    # Update the bot status
-    bot.is_running = False
-    db.add(bot)
-    db.commit()
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to stop bot",
+        )
+    
+    # Refresh bot from database to get updated status
+    db.refresh(bot)
+    
+    return bot
+
+@router.post("/{bot_id}/restart", response_model=schemas.Bot)
+def restart_bot(
+    *,
+    db: Session = Depends(get_db),
+    bot_id: int,
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    Restart a bot.
+    """
+    bot = db.query(models.Bot).filter(
+        models.Bot.id == bot_id,
+        models.Bot.user_id == current_user.id
+    ).first()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found",
+        )
+    
+    # Restart the bot using the controller
+    success = bot_controller.restart_bot(current_user.id, bot_id, db)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to restart bot",
+        )
+    
+    # Refresh bot from database to get updated status
+    db.refresh(bot)
+    
+    return bot
+
+@router.post("/{bot_id}/update_config", response_model=schemas.Bot)
+def update_bot_config(
+    *,
+    db: Session = Depends(get_db),
+    bot_id: int,
+    config: Dict[str, Any],
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    Update a bot's configuration.
+    """
+    bot = db.query(models.Bot).filter(
+        models.Bot.id == bot_id,
+        models.Bot.user_id == current_user.id
+    ).first()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found",
+        )
+    
+    # Update bot configuration using the controller
+    success = bot_controller.update_bot_config(current_user.id, bot_id, config, db)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update bot configuration",
+        )
+    
+    # Refresh bot from database to get updated status
     db.refresh(bot)
     
     return bot
@@ -679,4 +737,245 @@ def validate_expression(
         return {
             "valid": False,
             "error": f"Validation error: {str(e)}"
+        }
+
+@router.get("/status", response_model=List[Dict[str, Any]])
+def get_bots_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    Get the status of all running bots for the current user.
+    """
+    # Get all bots for the current user
+    bots = db.query(models.Bot).filter(
+        models.Bot.user_id == current_user.id
+    ).all()
+    
+    result = []
+    for bot in bots:
+        # Get open trades for this bot
+        open_trade = db.query(models.Trade).filter(
+            models.Trade.bot_id == bot.id,
+            models.Trade.status == "open"
+        ).first()
+        
+        # Get recent closed trades (last 5)
+        closed_trades = db.query(models.Trade).filter(
+            models.Trade.bot_id == bot.id,
+            models.Trade.status == "closed"
+        ).order_by(models.Trade.exit_time.desc()).limit(5).all()
+        
+        # Format trades
+        trade_info = None
+        if open_trade:
+            trade_info = {
+                "id": open_trade.id,
+                "type": open_trade.type,
+                "entry_price": open_trade.entry_price,
+                "entry_time": open_trade.entry_time.isoformat(),
+                "tp_price": open_trade.tp_price,
+                "sl_price": open_trade.sl_price,
+            }
+        
+        recent_trades = []
+        for trade in closed_trades:
+            recent_trades.append({
+                "id": trade.id,
+                "type": trade.type,
+                "entry_price": trade.entry_price,
+                "exit_price": trade.exit_price,
+                "entry_time": trade.entry_time.isoformat(),
+                "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
+                "profit_loss": trade.profit_loss,
+                "profit_loss_percent": trade.profit_loss_percent,
+                "exit_reason": trade.exit_reason,
+            })
+        
+        result.append({
+            "id": bot.id,
+            "name": bot.name,
+            "pair": bot.pair,
+            "timeframe": bot.timeframe,
+            "is_active": bot.is_active,
+            "is_running": bot.is_running,
+            "bot_type": bot.bot_type,
+            "current_trade": trade_info,
+            "recent_trades": recent_trades
+        })
+    
+    return result
+
+@router.get("/test-market-data", response_model=Dict[str, Any])
+async def test_market_data_connection(
+    symbol: str = "EURUSD",
+    timeframe: str = "1h",
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_superuser),  # Only superusers can run diagnostics
+) -> Any:
+    """
+    Test connection to market data service and diagnose potential issues.
+    Only available to admin users for security reasons.
+    """
+    try:
+        from app.utils.market_data import test_market_data_access, check_influxdb_connection
+        
+        # Run a complete test
+        result = await test_market_data_access(symbol, timeframe)
+        
+        return {
+            "status": "success",
+            "data": result,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error testing market data connection: {e}")
+        traceback.print_exc()
+        
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@router.get("/available-data", response_model=Dict[str, Any])
+async def get_available_data(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> Any:
+    """
+    Get available symbol/timeframe combinations for bot configuration.
+    This helps users select symbols and timeframes that actually have data.
+    Returns both MT5 format (M1, H1, D1) and normalized format (1m, 1h, 1d).
+    """
+    try:
+        from app.utils.market_data import check_influxdb_connection
+        
+        # Check connection and get available data
+        connection_data = check_influxdb_connection()
+        
+        # Extract available symbol/timeframe combinations
+        available_combinations = []
+        
+        if connection_data.get("sample_data"):
+            available_combinations = list(connection_data["sample_data"].keys())
+            available_combinations.sort()
+        
+        # Group by symbol with both timeframe formats
+        symbols_data = {}
+        for combo in available_combinations:
+            if "/" in combo:
+                symbol, timeframe = combo.split("/", 1)
+                
+                if symbol not in symbols_data:
+                    symbols_data[symbol] = {
+                        "mt5_timeframes": [],
+                        "normalized_timeframes": []
+                    }
+                
+                # Store the original timeframe
+                if timeframe.startswith(('M', 'H', 'D')):
+                    if timeframe not in symbols_data[symbol]["mt5_timeframes"]:
+                        symbols_data[symbol]["mt5_timeframes"].append(timeframe)
+                    
+                    # Add normalized version
+                    normalized = None
+                    if timeframe.startswith('M') and timeframe[1:].isdigit():
+                        normalized = f"{timeframe[1:]}m"
+                    elif timeframe.startswith('H') and timeframe[1:].isdigit():
+                        normalized = f"{timeframe[1:]}h"
+                    elif timeframe.startswith('D') and timeframe[1:].isdigit():
+                        normalized = f"{timeframe[1:]}d"
+                    
+                    if normalized and normalized not in symbols_data[symbol]["normalized_timeframes"]:
+                        symbols_data[symbol]["normalized_timeframes"].append(normalized)
+                else:
+                    # It's already in normalized format
+                    if timeframe not in symbols_data[symbol]["normalized_timeframes"]:
+                        symbols_data[symbol]["normalized_timeframes"].append(timeframe)
+                    
+                    # Add MT5 version
+                    mt5_format = None
+                    if timeframe.endswith('m') and timeframe[:-1].isdigit():
+                        mt5_format = f"M{timeframe[:-1]}"
+                    elif timeframe.endswith('h') and timeframe[:-1].isdigit():
+                        mt5_format = f"H{timeframe[:-1]}"
+                    elif timeframe.endswith('d') and timeframe[:-1].isdigit():
+                        mt5_format = f"D{timeframe[:-1]}"
+                    
+                    if mt5_format and mt5_format not in symbols_data[symbol]["mt5_timeframes"]:
+                        symbols_data[symbol]["mt5_timeframes"].append(mt5_format)
+        
+        # Sort timeframes for each symbol
+        for symbol in symbols_data:
+            symbols_data[symbol]["mt5_timeframes"].sort()
+            symbols_data[symbol]["normalized_timeframes"].sort()
+        
+        return {
+            "status": "success",
+            "connection_status": connection_data.get("connection_status", "unknown"),
+            "symbols": symbols_data,
+            "combinations": available_combinations,
+            "example_usage": "When configuring your bot, use the MT5 timeframe format (M1, H1, D1, etc.) as shown in your InfluxDB."
+        }
+    except Exception as e:
+        logger.error(f"Error getting available data: {e}")
+        traceback.print_exc()
+        
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@router.post("/test-condition-parser", response_model=Dict[str, Any])
+async def test_condition_parser(
+    condition: str = Body(..., embed=True),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    """
+    Test the parser for trading conditions.
+    This endpoint helps validate that the condition parsing logic works correctly.
+    """
+    from app.bots.trading_bot import TradingBot
+    
+    try:
+        # Create a dummy bot instance for testing
+        dummy_bot = TradingBot(
+            bot_id=0,
+            pair="EURUSD",
+            timeframe="M1",
+            buy_condition="",
+            sell_condition="",
+            db_session=None  # No need for DB session for this test
+        )
+        
+        # Parse the condition
+        parsed_condition = dummy_bot._parse_condition(condition)
+        
+        # Analyze the condition to extract indicators
+        import re
+        indicator_pattern = r'([A-Za-z]+)\(([A-Za-z]+)\)(\d+)'
+        indicators_found = []
+        
+        for match in re.finditer(indicator_pattern, condition):
+            indicators_found.append({
+                "full_name": match.group(1),
+                "abbreviation": match.group(2),
+                "period": match.group(3),
+                "parsed_as": f"{match.group(2)}_{match.group(3)}"
+            })
+        
+        return {
+            "status": "success",
+            "original_condition": condition,
+            "parsed_condition": parsed_condition,
+            "indicators_found": indicators_found
+        }
+    except Exception as e:
+        logger.error(f"Error testing condition parser: {e}")
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "error": str(e),
+            "original_condition": condition
         } 
