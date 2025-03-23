@@ -9,7 +9,7 @@ COPY package*.json ./
 RUN npm install
 
 # Add Express and cors for the server
-RUN npm install express cors
+RUN npm install -g serve
 
 # Copy the rest of the application code
 COPY . .
@@ -21,4 +21,4 @@ RUN npm run build
 EXPOSE 3000
 
 # Start the custom server
-CMD ["node", "server.js"] 
+CMD ["sh", "-c", "npm run build && serve -s build"] 

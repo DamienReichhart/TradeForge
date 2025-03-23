@@ -169,11 +169,11 @@ services:
     restart: unless-stopped
     command: tunnel run
     environment:
-      - TUNNEL_TOKEN=eyJhIjoiNWVmMDRlNzNiODkxMjZlZWQyN2JkMDZmZDFhMTg3NTIiLCJ0IjoiY2I3M2I5OTAtZDBjNy00ZDU0LWI1NjQtZDljMmM0YjRlZTM4IiwicyI6IlpHSTFPVGc1Tm1JdFl6SXdOeTAwWVdZeUxXRm1aVGt0TkRWak1HVTBPRGMzWkRRMSJ9
+      - TUNNEL_TOKEN=eyJhIjoiNWVmMDRlNzNiODkxMjZlZWQyN2JkMDZmZDFhMTg3NTIiLCJ0IjoiOTk3ZmMyOTYtYTE2MC00Y2Y4LWE1YmYtMmQzY2JlNWFiNjVjIiwicyI6Ill6UXdaakkxWWpndE1UUTFPQzAwWkdOaUxXSmlNVEF0T0RRNVpURmpZekpoTm1FeiJ9
     networks:
       tradeforge-network:
         ipv4_address: 10.10.0.100
-
+        
 networks:
   tradeforge-network:
     driver: bridge
